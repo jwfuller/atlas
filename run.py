@@ -130,8 +130,7 @@ class AtlasBasicAuth(BasicAuth):
 Setup the application and logging.
 """
 # Tell Eve to use Basic Auth where our data structure is defined.
-app = Eve(auth=AtlasBasicAuth, settings="/data/code/atlas/settings_data_structure.py")
-
+app = Eve(auth=AtlasBasicAuth, settings="/data/code/atlas/config_data_structure.py")
 # TODO: Remove debug mode.
 app.debug = True
 
