@@ -28,16 +28,19 @@ code_schema = {
         'type': 'string',
         'minlength': 3,
         'required': True,
+        'unique_combination': True,
     },
     'version': {
         'type': 'string',
         'minlength': 1,
         'required': True,
+        'unique_combination': True,
     },
     'type': {
         'type': 'string',
         'allowed':  ['custom_package', 'contrib_package', 'drupal_core', 'profile'],
         'required': True,
+        'unique_combination': True,
     },
     'git_url': {
         'type': 'string',
@@ -51,6 +54,7 @@ code_schema = {
     'is_current': {
         'type': 'boolean',
         'default': False,
+        'unique_combination': True,
     },
 }
 

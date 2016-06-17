@@ -6,6 +6,8 @@ import datetime
 
 from eve import Eve
 from eve.auth import BasicAuth
+from eve.io.mongo import Validator
+from eve.utils import config
 
 from atlas.config import allowed_users, ldap_server, ldap_org_unit, ldap_dns_domain_name
 from atlas.tasks import *
@@ -102,6 +104,46 @@ class AtlasBasicAuth(BasicAuth):
         app.logger.info('LDAP - {0} - Bind failed'.format(username))
         return False
 
+class AtlasValidator(Validator):
+    def _validate_unique_combination(self, unique_combination, field, value):
+        """ Enables validation for a 'unique_combination' schema elements.
+
+        Based on https://github.com/nicolaiarocci/eve/blob/master/eve/io/mongo/validation.py
+
+        :param unique_combination: Boolean, should field be considered as part of the unique combination.
+        :param field: Field name
+        :param value: Field value
+        """
+        self._is_combination_unique(unique_combination, field, value, {})
+
+    def _is_combination_unique(self, unique_combination, field, value, query):
+        """ Validates that the values of a set of fields is unique.
+
+        """
+        if unique_combination:
+            query[field] = value
+            app.logger.debug(query)
+
+            # Get information about the current resource.
+            resource_config = config.DOMAIN[self.resource]
+            app.logger.debug(resource_config)
+            # We are not going to exclude soft deleted documents but we want
+            # to exclude the current document.
+            if self._id:
+                id_field = resource_config['id_field']
+                query[id_field] = {'$ne': self._id}
+                app.logger.debug(query)
+
+            # we perform the check on the native mongo driver (and not on
+            # app.data.find_one()) because in this case we don't want the usual
+            # (for eve) query injection to interfere with this validation. We
+            # are still operating within eve's mongo namespace anyway.
+
+            datasource, _, _, _ = app.data.datasource(self.resource)
+            if app.data.driver.db[datasource].find_one(query):
+                self._error(field, "value '%s' is not unique" % value)
+
+
 # TODO: Add in a message and/or result broker, I don't want to use the DB. It is currently 41 GB for inventory.
 
 
@@ -109,7 +151,9 @@ class AtlasBasicAuth(BasicAuth):
 Setup the application and logging.
 """
 # Tell Eve to use Basic Auth where our data structure is defined.
-app = Eve(auth=AtlasBasicAuth, settings="/data/code/atlas/config_data_structure.py")
+app = Eve(auth=AtlasBasicAuth,
+          settings="/data/code/atlas/config_data_structure.py",
+          validator=AtlasValidator)
 # TODO: Remove debug mode.
 app.debug = True
 
