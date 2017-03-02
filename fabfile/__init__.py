@@ -15,6 +15,7 @@ from jinja2 import Environment, PackageLoader
 from random import randint
 from time import time
 from datetime import datetime
+from subprocess import call
 from atlas.config import *
 from atlas import utilities
 
@@ -457,8 +458,22 @@ def update_database(site):
 
 
 @roles('webservers')
-def clear_apc():
-    run("wget -q -O - http://localhost/sysadmintools/apc/clearapc.php")
+def clear_apc(path=None):
+    """
+    Clear APC on a server. Can clear the whole thing or a given path.
+    :param path:
+    :return:
+    """
+    if path:
+        print('Clear APC - Single item - {0}'.format(path))
+        apc_single_path = atlas_scripts_directory + '/clear_single_apc.php'
+        call(["php", "-f", "{0}".format(apc_single_path), "path:{0}".format(path)])
+        run("php {0} {1}".format(apc_single_path, path))
+        run("wget -q -O - http://localhost/sysadmintools/apc/clearapc.php")
+    else:
+        print('Clear APC - Whole thing')
+        apc_path = atlas_scripts_directory + '/clear_apc.php'
+        run("wget -q -O - http://localhost/sysadmintools/apc/clearapc.php")
 
 
 def drush_cache_clear(sid):

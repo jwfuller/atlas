@@ -16,11 +16,14 @@ load_balancer = True
 # We use separate site_web_root and site_code_root to make it easy use
 # different vhosts for different types of sites and to make it easy to switch
 # to the down page.
-code_root = '/data/code'
-sites_web_root = '/data/atlas/web'
-sites_code_root = '/data/atlas/sites'
-site_down_path = '/data/code/down'
-backup_directory = '/data/backups'
+code_root = '/code'
+sites_web_root = '/atlas/web'
+sites_code_root = '/atlas/sites'
+site_down_path = '/code/down'
+backup_directory = '/backups'
+
+# Atlas scripts directory.
+atlas_scripts_directory = '/code/atlas-scripts'
 
 # Default core and profile names for site creation. If you do not set
 # default_profile, sites without a profile on POST will do a core install.
