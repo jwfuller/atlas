@@ -474,7 +474,7 @@ def registry_rebuild(site):
 
 
 @roles('webservers')
-def clear_apc(path=None):
+def clear_apc(path=None, directory=None):
     """
     Clear APC on a server. Can clear the whole thing or a given path.
     :param path:
@@ -482,13 +482,11 @@ def clear_apc(path=None):
     """
     if path:
         print('Clear APC - Single item - {0}'.format(path))
-        apc_single_path = atlas_scripts_directory + '/clear_single_apc.php'
-        call(["php", "-f", "{0}".format(apc_single_path), "path:{0}".format(path)])
-        run("php {0} {1}".format(apc_single_path, path))
-        run("wget -q -O - http://localhost/sysadmintools/apc/clearapc.php")
+        run('wget -q -O - http://localhost/sysadmintools/apc/clear_single_apc.php?path="{0}"'.format(path))
+    elif directory:
+        run('wget -q -O - http://localhost/sysadmintools/apc/clear_single_apc.php?directory="{0}"'.format(directory))
     else:
         print('Clear APC - Whole thing')
-        apc_path = atlas_scripts_directory + '/clear_apc.php'
         run("wget -q -O - http://localhost/sysadmintools/apc/clearapc.php")
 
 
@@ -689,6 +687,7 @@ def _push_settings_files(site, directory):
     print('Push settings\n{0}\n{1}'.format(site, directory))
     send_from = '/tmp/{0}'.format(site['sid'])
     send_to = "{0}/sites/default".format(directory)
+    settings_paths = ["{0}/settings.local_pre.php".format(send_to), "{0}/settings.local_pre.php".format(send_to),  "{0}/settings.local_pre.php".format(send_to)]
     run("chmod -R 755 {0}".format(send_to))
     put("{0}.settings.local_pre.php".format(send_from),
         "{0}/settings.local_pre.php".format(send_to))
@@ -696,6 +695,8 @@ def _push_settings_files(site, directory):
         "{0}/settings.local_post.php".format(send_to))
     put("{0}.settings.php".format(send_from),
         "{0}/settings.php".format(send_to))
+    for file_to_clear in settings_paths:
+        clear_apc(file=file_to_clear)
 
 
 @runs_once
@@ -911,12 +912,9 @@ def _launch_site(site, gsa_collection=False):
                     _update_symlink(code_directory_current, site['path'])
                 # enter new site directory
                 with cd(web_directory_path):
-                    clear_apc()
                     if gsa_collection:
                         # Set the collection name
                         run("drush vset --yes google_appliance_collection {0}".format(gsa_collection))
-                    # Clear caches at the end of the launch process to show
-                    # correct pathologic rendered URLS.
                     drush_cache_clear(site['sid'])
             # Assign it to an update group.
             update_group = randint(0, 10)
@@ -926,7 +924,6 @@ def _launch_site(site, gsa_collection=False):
                 _update_symlink(code_directory_current, web_directory)
                 # enter new site directory
             with cd(web_directory):
-                clear_apc()
                 drush_cache_clear(site['sid'])
             # Assign site to update group 12.
             update_group = 12
