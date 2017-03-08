@@ -474,15 +474,15 @@ def registry_rebuild(site):
 
 
 @roles('webservers')
-def clear_apc(path=None, directory=None):
+def clear_apc(file=None, directory=None):
     """
     Clear APC on a server. Can clear the whole thing or a given path.
     :param path:
     :return:
     """
-    if path:
-        print('Clear APC - Single item - {0}'.format(path))
-        run('wget -q -O - http://localhost/sysadmintools/atlas-apc/clear_single_apc.php?path="{0}"'.format(path))
+    if file:
+        print('Clear APC - Single item - {0}'.format(file))
+        run('wget -q -O - http://localhost/sysadmintools/atlas-apc/clear_single_apc.php?file="{0}"'.format(file))
     elif directory:
         run('wget -q -O - http://localhost/sysadmintools/atlas-apc/clear_single_apc.php?directory="{0}"'.format(directory))
     else:
