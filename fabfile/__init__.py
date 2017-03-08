@@ -482,12 +482,12 @@ def clear_apc(path=None, directory=None):
     """
     if path:
         print('Clear APC - Single item - {0}'.format(path))
-        run('wget -q -O - http://localhost/sysadmintools/apc/clear_single_apc.php?path="{0}"'.format(path))
+        run('wget -q -O - http://localhost/sysadmintools/atlas-apc/clear_single_apc.php?path="{0}"'.format(path))
     elif directory:
-        run('wget -q -O - http://localhost/sysadmintools/apc/clear_single_apc.php?directory="{0}"'.format(directory))
+        run('wget -q -O - http://localhost/sysadmintools/atlas-apc/clear_single_apc.php?directory="{0}"'.format(directory))
     else:
         print('Clear APC - Whole thing')
-        run("wget -q -O - http://localhost/sysadmintools/apc/clearapc.php")
+        run("wget -q -O - http://localhost/sysadmintools/atlas-apc/clearapc.php")
 
 
 def drush_cache_clear(sid):
