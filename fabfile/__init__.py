@@ -474,17 +474,40 @@ def registry_rebuild(site):
 
 
 @roles('webservers')
-def clear_apc(file=None, directory=None):
+def clear_apc(item=None):
     """
-    Clear APC on a server. Can clear the whole thing or a given path.
-    :param path:
+    Clear APC on a server. Can clear the whole thing or a given site.
+    :param item: Complete site item.
     :return:
     """
-    if file:
-        print('Clear APC - Single item - {0}'.format(file))
-        run('wget -q -O - http://localhost/sysadmintools/atlas-apc/clear_single_apc.php?file="{0}"'.format(file))
-    elif directory:
-        run('wget -q -O - http://localhost/sysadmintools/atlas-apc/clear_single_apc.php?directory="{0}"'.format(directory))
+    if item:
+        print('Clear APC - Single item - {0}'.format(item))
+
+        item_path = '{0}/{1}/current'.format(sites_code_root, item['sid'])
+        file_path = item_path + '/atlas_apc_clear_item.php'
+
+        shell_script_path = '/home/{0}/clearAPC.sh'.format(ssh_user)
+
+        # Verify that the PHP file for clearing APC exists and create it if it
+        # doesn't.
+        if not exists(file_path):
+            get_from = '/data/code/atlas/scripts/atlas_apc_clear_item.php'
+            send_to = item_path
+            put(get_from, send_to)
+
+        if not exists(shell_script_path):
+            shell_script_src = '/data/code/atlas/scripts/clearAPC.sh'
+            shell_script_dest = '/home/{0}'.format(ssh_user)
+            put(shell_script_src, shell_script_dest)
+            run('chmod 0744 {}'.format(shell_script_path))
+
+        # I know this is terrible. For some reason the 'wget' approach doesn't
+        # work when called via Fabric. It works when run directly on the
+        # webserver. It works when run via SSH. I have no idea why the bash
+        # script wrapper works when Fabric doesn't, but hey, progress.
+        command = './clearAPC.sh -p {0}/atlas_apc_clear_item.php'.format(item['path'])
+        with cd('~'):
+            run(command)
     else:
         print('Clear APC - Whole thing')
         run("wget -q -O - http://localhost/sysadmintools/atlas-apc/clearapc.php")
@@ -687,7 +710,6 @@ def _push_settings_files(site, directory):
     print('Push settings\n{0}\n{1}'.format(site, directory))
     send_from = '/tmp/{0}'.format(site['sid'])
     send_to = "{0}/sites/default".format(directory)
-    settings_paths = ["{0}/settings.local_pre.php".format(send_to), "{0}/settings.local_pre.php".format(send_to),  "{0}/settings.local_pre.php".format(send_to)]
     run("chmod -R 755 {0}".format(send_to))
     put("{0}.settings.local_pre.php".format(send_from),
         "{0}/settings.local_pre.php".format(send_to))
@@ -695,8 +717,7 @@ def _push_settings_files(site, directory):
         "{0}/settings.local_post.php".format(send_to))
     put("{0}.settings.php".format(send_from),
         "{0}/settings.php".format(send_to))
-    for file_to_clear in settings_paths:
-        clear_apc(file=file_to_clear)
+    clear_apc(item=site)
 
 
 @runs_once
