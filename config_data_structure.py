@@ -126,6 +126,7 @@ sites_schema = {
         'type': 'string',
         'allowed': [
             'pending',
+            'skeleton',
             'available',
             'installing',
             'installed',
@@ -216,6 +217,34 @@ sites_schema = {
             },
         },
     },
+    'replication': {
+        'type': 'dict',
+        'schema': {
+            'source_instance': {
+                'type': 'objectid',
+                'data_relation': {
+                    'resource': 'site',
+                    'field': '_id',
+                    'embeddable': True,
+                },
+            },
+            'replica_instance': {
+                'type': 'list',
+                'schema': {
+                    'type': 'objectid',
+                    'data_relation': {
+                        'resource': 'site',
+                        'field': '_id',
+                        'embeddable': True,
+                    },
+                }
+            },
+            # Should this instance be locked? Useful if they are revamping a site.
+            'locked': {
+                'type': 'boolean',
+            },
+        },
+    },
     'dates': {
         'type': 'dict',
         'schema': {
@@ -227,6 +256,9 @@ sites_schema = {
                 'type': 'datetime',
             },
             'launched': {
+                'type': 'datetime',
+            },
+            'replica_lock': {
                 'type': 'datetime',
             },
             'taken_down': {

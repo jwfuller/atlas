@@ -155,11 +155,12 @@ def code_remove(item):
 
 
 @celery.task
-def site_provision(site):
+def site_provision(site, install=True):
     """
     Provision a new instance with the given parameters.
 
     :param site: A single site.
+    :param install: should the install function be run.
     :return:
     """
     logger.debug('Site provision - {0}'.format(site))
@@ -167,20 +168,24 @@ def site_provision(site):
     # 'db_key' needs to be added here and not in Eve so that the encryption
     # works properly.
     site['db_key'] = utilities.encrypt_string(utilities.mysql_password())
-    # Set future site status for settings file creation.
-    site['status'] = 'available'
+    if install:
+        # Set future site status for settings file creation.
+        site['status'] = 'available'
+    else:
+        site['status'] = 'skeleton'
 
     provision_task = execute(fabfile.site_provision, site=site)
 
     logger.debug(provision_task)
     logger.debug(provision_task.values)
 
-    install_task = execute(fabfile.site_install, site=site)
+    if install:
+        install_task = execute(fabfile.site_install, site=site)
 
-    logger.debug(install_task)
-    logger.debug(install_task.values)
+        logger.debug(install_task)
+        logger.debug(install_task.values)
 
-    patch_payload = {'status': 'available', 'db_key': site['db_key'], 'statistics': site['statistics']}
+    patch_payload = {'status': site['status'], 'db_key': site['db_key'], 'statistics': site['statistics']}
     patch = utilities.patch_eve('sites', site['_id'], patch_payload)
 
     profile = utilities.get_single_eve('code', site['code']['profile'])
@@ -190,13 +195,26 @@ def site_provision(site):
     core_string = core['meta']['name'] + '-' + core['meta']['version']
 
     provision_time = time.time() - start_time
-    logger.info('Atlas operational statistic | Site Provision - {0} - {1} | {2} '.format(core_string, profile_string, provision_time))
+    logger.info('Atlas operational statistic | Site Provision | {0} | {1} | Install: {2} | Time: {3}'.format(core_string, profile_string, install, provision_time))
     logger.debug('Site has been provisioned\n{0}'.format(patch))
 
     slack_title = '{0}/{1}'.format(base_urls[environment], site['path'])
     slack_link = '{0}/{1}'.format(base_urls[environment], site['path'])
     attachment_text = '{0}/sites/{1}'.format(api_urls[environment], site['_id'])
-    if False not in (provision_task.values() or install_task.values()):
+    if False not in provision_task.values():
+        try:
+            install_task
+        except NameError:
+            provision_success = True
+        else:
+            if False not in install_task.values():
+                provision_success = True
+            else:
+                provision_success = False
+    else:
+        provision_success = False
+
+    if provision_success:
         slack_message = 'Site provision - Success - {0} seconds'.format(provision_time)
         slack_color = 'good'
         utilities.post_to_slack(
@@ -209,6 +227,71 @@ def site_provision(site):
                             'logsource': 'atlas'}
         utilities.post_to_logstash_payload(payload=logstash_payload)
 
+
+@celery.task
+def site_clone(site):
+    """
+    Provision a new instance with the given parameters.
+
+    :param site: SID for the site to clone.
+    :return:
+    """
+    source_site = utilities.get_single_eve(site)
+    logger.debug('Site clone - {0}'.format(source_site))
+    clone_start_time = time.time()
+
+    destination_site = {
+        'code': source_site['code'],
+        'replication': {
+            'source_instance': source_site['_id']
+        }
+    }
+
+    utilities.post_eve('sites', payload=destination_site)
+
+    provision_task = execute(fabfile.site_provision, site=destination_site)
+
+    logger.debug(provision_task)
+    logger.debug(provision_task.values)
+
+    backup_old_site_task = execute(fabfile.site_backup, site=site)
+
+    logger.debug(backup_old_site_task)
+    logger.debug(backup_old_site_task.values)
+
+    import_backup_task = execute(fabfile.site_restore, site=site, backup=backup_old_site_task)
+
+    logger.debug(import_backup_task)
+    logger.debug(import_backup_task.values)
+
+    patch_payload = {'status': 'installed', 'db_key': site['db_key'], 'statistics': site['statistics']}
+    patch = utilities.patch_eve('sites', site['_id'], patch_payload)
+
+    profile = utilities.get_single_eve('code', site['code']['profile'])
+    profile_string = profile['meta']['name'] + '-' + profile['meta']['version']
+
+    core = utilities.get_single_eve('code', site['code']['core'])
+    core_string = core['meta']['name'] + '-' + core['meta']['version']
+
+    clone_time = time.time() - clone_start_time
+    logger.info('Atlas operational statistic | Site Provision - {0} - {1} | {2} '.format(core_string, profile_string, clone_time))
+    logger.debug('Site has been provisioned\n{0}'.format(patch))
+
+    slack_title = '{0}/{1}'.format(base_urls[environment], site['path'])
+    slack_link = '{0}/{1}'.format(base_urls[environment], site['path'])
+    attachment_text = '{0}/sites/{1}'.format(api_urls[environment], site['_id'])
+    if False not in (provision_task.values() or install_task.values()):
+        slack_message = 'Site clone - Success - {0} seconds'.format(clone_time)
+        slack_color = 'good'
+        utilities.post_to_slack(
+            message=slack_message,
+            title=slack_title,
+            link=slack_link,
+            attachment_text=attachment_text,
+            level=slack_color)
+        logstash_payload = {'clone_time': clone_time,
+                            'logsource': 'atlas'}
+        utilities.post_to_logstash_payload(payload=logstash_payload)
 
 @celery.task
 def site_update(site, updates, original):
@@ -366,6 +449,9 @@ def command_prepare(item):
         return
     if item['command'] == 'rebalance_update_groups':
         utilities.rebalance_update_groups(item)
+        return
+    if item['command'] == 'clone_instance':
+        site_clone.delay(item['query'])
         return
     if item['query']:
         site_query = 'where={0}'.format(item['query'])
