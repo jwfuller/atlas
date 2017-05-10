@@ -7,7 +7,7 @@ import ssl
 from eve import Eve
 from flask import abort, jsonify, g, make_response
 from hashlib import sha1
-from bson import ObjectId
+from bson import ObjectId, json_util
 from atlas import tasks
 from atlas import utilities
 from atlas.config import *
@@ -127,7 +127,7 @@ def on_inserted_sites_callback(items):
             item['statistics'] = str(statistics['_id'])
             app.logger.debug('Ready to send to Celery\n{0}'.format(item))
             if not item['import_from_inventory']:
-                tasks.site_provision.delay(item)
+                tasks.site_provision.delay(json_util.dumps(item))
             else:
                 tasks.site_import_from_inventory.delay(item)
 

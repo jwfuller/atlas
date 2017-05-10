@@ -2,37 +2,24 @@ from datetime import timedelta
 from celery.schedules import crontab
 from config_local import *
 
-BROKER_URL='amqp://guest@localhost//'
-CELERY_RESULT_BACKEND = 'mongodb://localhost:27017/'
-CELERY_MONGODB_BACKEND_SETTINGS = {
+broker_url='amqp://guest@localhost//'
+result_backend = 'mongodb://localhost:27017/'
+mongodb_backend_settings = {
     'database': 'celery',
     'taskmeta_collection': 'taskmeta_collection',
 }
 
-CELERY_TIMEZONE = 'MST'
-CELERY_ENABLE_UTC = True
+timezone = 'MST'
+enable_utc = True
 # Time in seconds
-CELERYD_TASK_TIME_LIMIT = 600
-
-# Enables error emails.
-CELERY_SEND_TASK_ERROR_EMAILS = send_error_emails
-
-# Email address used as sender (From field).
-SERVER_EMAIL = send_from_email
-
-# Mailserver configuration
-EMAIL_HOST = email_host
-EMAIL_PORT = email_port
-EMAIL_USE_TLS = email_use_tls
-EMAIL_HOST_USER = email_username
-EMAIL_HOST_PASSWORD = email_password
+task_time_limit = 600
 
 # Setup routing so that we don't overwhelm the server wh.
-CELERY_ROUTES = {
+task_routes = {
     'atlas.tasks.command_run': {'queue': 'command_queue'},
 }
 
-CELERYBEAT_SCHEDULE = {
+beat_schedule = {
     'launched_cron': {
         'task': 'atlas.tasks.cron',
         'schedule': timedelta(minutes=60),
