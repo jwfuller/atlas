@@ -8,6 +8,8 @@ from eve import Eve
 from flask import abort, jsonify, g, make_response
 from hashlib import sha1
 from bson import ObjectId
+from time import sleep
+from celery import group, chain
 from atlas import tasks
 from atlas import utilities
 from atlas.config import *
@@ -189,7 +191,7 @@ def on_update_code_callback(updates, original):
     app.logger.debug(updates)
     app.logger.debug(original)
     # If this 'is_current' PATCH code with the same name and code_type.
-    if updates.get('meta') and updates['meta'].get('is_current') and updates['meta']['is_current'] == True:
+    if updates.get('meta') and updates['meta'].get('is_current') and updates['meta']['is_current'] is True:
         # If the name and code_type are not changing, we need to load them from
         # the original.
         name = updates['meta']['name'] if updates['meta'].get('name') else original['meta']['name']
@@ -217,8 +219,32 @@ def on_update_code_callback(updates, original):
     if updates.get('meta'):
         updated_item['meta'] = meta
 
-    app.logger.debug('Ready to hand to Celery\n{0}\n{1}'.format(updated_item, original))
-    tasks.code_update.delay(updated_item, original)
+    # Update instances that use this code item.
+    code_type = updates['meta']['code_type'] if updates['meta'].get('code_type') else original['meta']['code_type']
+    if code_type in ['module', 'theme', 'library']:
+        code_type_query = 'package'
+        site_update = {'code': {code_type_query: [original['_id']]}, 'modified_by':'osr_web_deploy'}
+    else:
+        code_type_query = code_type
+        site_update = {'code': {code_type_query: original['_id']}, 'modified_by':'osr_web_deploy'}
+
+    app.logger.debug(code_type_query)
+    site_query = 'where={{"code.{0}":"{1}"}}'.format(code_type_query, original['_id'])
+    sites = utilities.get_eve('sites', site_query)
+    app.logger.debug(sites)
+
+    if not sites['_meta']['total'] == 0:
+        app.logger.debug('Found sites that use code')
+        app.logger.debug('Ready to hand to Celery - Chain')
+        # Create a celery group of all the site update tasks.
+        # This produces an error about task names, but seems to work anyway...
+        site_update_group = group(tasks.site_update.delay(site, site_update, site) for site in sites['_items'])()
+        app.logger.debug(site_update_group)
+        # Chain the group to the code deploy task, so that sites don't update if the code deploy fails.
+        chain(tasks.code_update.delay(updated_item, original), site_update_group)
+    else:
+        app.logger.debug('Ready to hand to Celery - No Chain')
+        tasks.code_update.delay(updated_item, original)
 
 
 def on_update_sites_callback(updates, original):

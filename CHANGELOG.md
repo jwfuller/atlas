@@ -9,6 +9,7 @@ Resolves:
 - &#35;270 - Add status to statistics
 - &#35;273 - Clean up temp files.
 - &#35;269 - Capture all bundles as typed or other
+- &#35;10 - Re-add packages to sites when changing meta data of a code item.
 
 ## v1.0.16
 
