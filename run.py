@@ -3,6 +3,7 @@ import logging
 import random
 import json
 import ssl
+import atlas
 
 from eve import Eve
 from flask import abort, jsonify, g, make_response
@@ -10,7 +11,6 @@ from hashlib import sha1
 from bson import ObjectId
 from time import sleep
 from celery import group, chain
-from atlas import tasks
 from atlas import utilities
 from atlas.config import *
 
@@ -124,14 +124,14 @@ def on_inserted_sites_callback(items):
             # Need to get the string out of the ObjectID.
             statistics_payload['site'] = str(item['_id'])
             app.logger.debug('Create Statistics item\n{0}'.format(statistics_payload))
-            statistics = utilities.post_eve(resource='statistics', payload=statistics_payload)
+            statistics = atlas.utilities.post_eve(resource='statistics', payload=statistics_payload)
             app.logger.debug(statistics)
             item['statistics'] = str(statistics['_id'])
             app.logger.debug('Ready to send to Celery\n{0}'.format(item))
             if not item['import_from_inventory']:
-                tasks.site_provision.delay(item)
+                atlas.tasks.site_provision.delay(item)
             else:
-                tasks.site_import_from_inventory.delay(item)
+                atlas.tasks.site_import_from_inventory.delay(item)
 
 
 def on_insert_code_callback(items):
@@ -156,7 +156,7 @@ def on_insert_code_callback(items):
                     request_payload = {'meta.is_current': False}
                     utilities.patch_eve('code', code['_id'], request_payload)
         app.logger.debug('Ready to send to Celery\n{0}'.format(item))
-        tasks.code_deploy.delay(item)
+        atlas.tasks.code_deploy.delay(item)
 
 
 def pre_delete_sites_callback(request, lookup):
@@ -237,11 +237,10 @@ def on_update_code_callback(updates, original):
         app.logger.debug('Found sites that use code')
         app.logger.debug('Ready to hand to Celery - Chain')
         # Create a celery group of all the site update tasks.
-        # This produces an error about task names, but seems to work anyway...
-        site_update_group = group(tasks.site_update.delay(site, site_update, site) for site in sites['_items'])()
+        site_update_group = group(tasks.site_update(site, site_update, site) for site in sites['_items'])()
         app.logger.debug(site_update_group)
         # Chain the group to the code deploy task, so that sites don't update if the code deploy fails.
-        chain(tasks.code_update.delay(updated_item, original), site_update_group)
+        chain(tasks.code_update(updated_item, original), site_update_group)
     else:
         app.logger.debug('Ready to hand to Celery - No Chain')
         tasks.code_update.delay(updated_item, original)

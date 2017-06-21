@@ -15,7 +15,7 @@ from hashlib import sha1
 from eve.auth import BasicAuth
 from flask import current_app, g
 from email.mime.text import MIMEText
-from atlas.config import *
+from atlas.atlas.config import *
 
 # Only needed for importing from Inventory.
 from Crypto.Cipher import AES

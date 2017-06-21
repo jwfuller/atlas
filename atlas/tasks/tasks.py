@@ -12,9 +12,9 @@ from celery import Celery
 from celery import group
 from celery.utils.log import get_task_logger
 from fabric.api import execute
-from atlas.config import *
-from atlas import utilities
-from atlas import config_celery
+from atlas.atlas.config import *
+from .. import utilities
+from .. import config_celery
 
 
 path = '/data/code'
