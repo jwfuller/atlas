@@ -627,6 +627,15 @@ def check_cron_result(payload):
 
 
 @celery.task
+def update_load_balancers():
+    """
+    Update the load balancers with the current route information.
+    """
+    execute(fabfile.diff_f5)
+    execute(fabfile.update_f5)
+
+
+@celery.task
 def available_instances_check():
     instance_query = 'where={"status":{"$in":["pending","available"]}}'
     instances = utilities.get_eve('instance', instance_query)

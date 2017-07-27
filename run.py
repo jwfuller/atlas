@@ -18,9 +18,9 @@ if atlas_path not in sys.path:
     sys.path.append(atlas_path)
 
 
-# TODO Routes - Creating routes - If I associate an active route with an unlaunched instance, what happens?
-# Launch it, also allow instance to launch and activate associated route.
+# TODO Instance - Launch and activate associated route.
 # TODO Routes - When route is created, if it has an instance or site, update references in those records
+# TODO Routes - When route is created check to see if the instance has a primary route.
 # TODO Routes - when route is updated: remove (and create) symlinks; update f5. Depending on what is changed.
 # TODO Site - Do we allow more than one launched instance per site?
 
@@ -148,21 +148,70 @@ def on_inserted_route_callback(items):
     app.logger.debug('Route | Inserted Callback | Items | %s', items)
     for item in items:
         app.logger.debug('Route | Inserted Callback | Single Item | %s', item)
-        if item['route_type'] == 'poolb-express' and item['route_status'] == 'active':
-            # TODO Check to see if instance needs to be launched
-            instance = utilities.get_single_eve('instance', item['instance_id'])
-            if instance['status'] == 'installed':
+        if item['route_status'] == 'active':
+            if item['route_type'] == 'poolb-express':
+                instance = utilities.get_single_eve('instance', item['instance_id'])
+                app.logger.debug('Route | Get Instance | %s', instance)
+                if instance['status'] == 'installed':
+                    instance_payload = {
+                        'status': 'launching',
+                        'path': item['source'],
+                        'routes': {
+                            'primary_route': str(item['_id'])
+                        }
+                    }
+                    # Symlink creation is handled by the launch Fabric task.
+                    launch_instance = utilities.patch_eve(
+                        'instance', item['instance_id'], instance_payload)
+                    app.logger.debug('Route | Launch Instance | %s', launch_instance)
+            # TODO: Redirects
+            elif item['route_type'] == 'redirect':
+                if environment is not 'local':
+                    instance = utilities.get_single_eve('instance', item['instance_id'])
+                    app.logger.debug('Route | Get instance | %s', instance)
+                    if instance.get('redirects'):
+                        redirects = instance['redirects']
+                        redirects.append(item['_id'])
+                    instance_payload = {
+                        'routes': {
+                            'redirect': redirects
+                        }
+                    }
+                    update_instance = utilities.patch_eve(
+                        'instance', item['instance_id'], instance_payload)
+                    app.logger.debug('Route | Update Instance | %s', update_instance)
+                    # FIXME: Instance launch also updates load balancer.
+                    tasks.update_load_balancers.delay()
+            elif item['route_type'] == 'legacy':
+                if environment is not 'local':
+                    # FIXME: Instance launch also updates load balancer.
+                    tasks.update_load_balancers.delay()
+        elif item['route_status'] == 'inactive':
+            if item['route_type'] == 'poolb-express':
+                instance = utilities.get_single_eve('instance', item['instance_id'])
+                app.logger.debug('Route | Get Instance | %s', instance)
                 instance_payload = {
-                    'status': 'launching',
-                    'path': item['source'],
-                    'route': str(item['_id'])
+                    'routes': {
+                        'primary_route': str(item['_id'])
+                    }
                 }
-                launch_instance = utilities.patch_eve('instance', item['instance_id'], instance_payload)
-                app.logger.debug('Route | Launch Instance | %s', launch_instance)
-            # TODO Write symlink
-            # TODO Update f5
-            # TODO Update site record.
+                update_instance = utilities.patch_eve(
+                    'instance', item['instance_id'], instance_payload)
+                app.logger.debug('Route | Update Instance | %s', update_instance)
 
+        if item.get('site_id'):
+            site = utilities.get_single_eve('site', item['site_id'])
+            app.logger.debug('Route | Get Site | %s', site)
+            if site.get('routes'):
+                routes = site['routes']
+                routes.append(item['_id'])
+            else:
+                routes = [site['routes']]
+            site_payload = {
+                'routes': routes
+            }
+            update_site = utilities.patch_eve('site', item['site_id'], site_payload)
+            app.logger.debug('Route | Update Site | %s', update_site)
 
 
 def on_insert_code_callback(items):
@@ -290,8 +339,7 @@ def on_update_instance_callback(updates, original):
                             if key == 'dependency':
                                 if value not in dependencies_list:
                                     for list_item in value:
-                                        # Convert each id string to a proper
-                                        # ObjectID.
+                                        # Convert each id string to a proper ObjectID.
                                         id_list.append(ObjectId(list_item))
                                     dependencies_list.extend(id_list)
                 app.logger.debug(dependencies_list)
@@ -312,12 +360,13 @@ def on_update_instance_callback(updates, original):
                     date_json = '{{"assigned":"{0} GMT"}}'.format(updates['_updated'])
                 elif updates['status'] == 'launching':
                     date_json = '{{"launched":"{0} GMT"}}'.format(updates['_updated'])
+                    # TODO Update appropriate routes
                 elif updates['status'] == 'locked':
-                    date_json = '{{"locked":""}}'.format(updates['_updated'])
+                    date_json = '{{"locked":""{0} GMT}}'.format(updates['_updated'])
                 elif updates['status'] == 'take_down':
                     date_json = '{{"taken_down":"{0} GMT"}}'.format(updates['_updated'])
                 elif updates['status'] == 'restore':
-                    date_json = '{{"taken_down":"{0}"}}'.format(updates['_updated'])
+                    date_json = '{{"taken_down":"{0} GMT"}}'.format(updates['_updated'])
 
                 updates['dates'] = json.loads(date_json)
 

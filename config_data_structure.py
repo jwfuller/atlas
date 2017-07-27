@@ -189,7 +189,7 @@ instance_schema = {
                 },
                 'nullable': True,
             },
-            'redirects': {
+            'redirect': {
                 'type': 'list',
                 'schema': {
                     'type': 'objectid',
@@ -219,9 +219,10 @@ instance_schema = {
         'maxlength': 14,
         'unique': True,
     },
+    # TODO Get rid of this field, should be able to handle in route.
     'type': {
         'type': 'string',
-        'allowed':  ['custom', 'express', 'legacy', 'homepage'],
+        'allowed':  ['express', 'homepage'],
         'default': 'express',
     },
     'status': {
