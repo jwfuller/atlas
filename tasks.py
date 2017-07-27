@@ -172,10 +172,10 @@ def instance_provision(instance):
     instance['status'] = 'available'
 
     try:
-        log.debug('Instance provision | Create database')
+        logger.debug('Instance provision | Create database')
         result_create_database = execute(fabfile.create_database, instance=instance)
     except :
-        log.error('Instance provision failed | Database creation failed | %s', result_create_database)
+        logger.error('Instance provision failed | Database creation failed | %s', result_create_database)
         return result_create_database
 
     try:
