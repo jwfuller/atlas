@@ -19,7 +19,9 @@ if atlas_path not in sys.path:
 
 
 # TODO Routes - Creating routes - If I associate an active route with an unlaunched instance, what happens?
-# TODO Routes - When route is created, if it has an instance or site, update those records
+# Launch it, also allow instance to launch and activate associated route.
+# TODO Routes - When route is created, if it has an instance or site, update references in those records
+# TODO Routes - when route is updated: remove (and create) symlinks; update f5. Depending on what is changed.
 # TODO Site - Do we allow more than one launched instance per site?
 
 
@@ -146,14 +148,21 @@ def on_inserted_route_callback(items):
     app.logger.debug('Route | Inserted Callback | Items | %s', items)
     for item in items:
         app.logger.debug('Route | Inserted Callback | Single Item | %s', item)
-        if item['route_type'] == 'poolb-express' and item['route_status'] == 'active' and item['active_on_launch'] is True:
-            payload = {
-                'status': 'launching',
-                'path': item['source'],
-                'route': str(item['_id'])
-            }
-            launch_instance = utilities.patch_eve('instance', item['instance_id'], payload)
-            app.logger.debug('Route | Launch Instance | %s', launch_instance)
+        if item['route_type'] == 'poolb-express' and item['route_status'] == 'active':
+            # TODO Check to see if instance needs to be launched
+            instance = utilities.get_single_eve('instance', item['instance_id'])
+            if instance['status'] == 'installed':
+                instance_payload = {
+                    'status': 'launching',
+                    'path': item['source'],
+                    'route': str(item['_id'])
+                }
+                launch_instance = utilities.patch_eve('instance', item['instance_id'], instance_payload)
+                app.logger.debug('Route | Launch Instance | %s', launch_instance)
+            # TODO Write symlink
+            # TODO Update f5
+            # TODO Update site record.
+
 
 
 def on_insert_code_callback(items):
@@ -379,11 +388,17 @@ app.on_pre_DELETE_instance += pre_delete_instance_callback
 # Database event hooks.
 app.on_insert_code += on_insert_code_callback
 app.on_insert_instance += on_insert_instance_callback
+# TODO If route is not a redirect, check to see if instance has primary route and reject if it does.
+#app.on_insert_route += on_insert_route_callback
 app.on_inserted_instance += on_inserted_instance_callback
 app.on_inserted_route += on_inserted_route_callback
 app.on_update_code += on_update_code_callback
 app.on_update_instance += on_update_instance_callback
 app.on_update_commands += on_update_commands_callback
+# TODO If route is not a redirect, check to see if instance has primary route and reject if it does.
+#app.on_update_route += on_update_route_callback
+# TODO If route is not a redirect, check to see is primary route for a launched instance, reject if it is.
+#app.on_delete_item_route += on_delete_item_route_callback
 app.on_delete_item_code += on_delete_item_code_callback
 app.on_insert += pre_insert
 app.on_update += pre_update

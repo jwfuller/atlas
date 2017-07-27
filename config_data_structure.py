@@ -144,6 +144,19 @@ site_schema = {
             'other'
         ],
     },
+    'routes': {
+        'type': 'list',
+        'schema': {
+            'type': 'objectid',
+            'data_relation': {
+                'resource': 'route',
+                'field': '_id',
+                'embeddable': True,
+                'unique': True,
+            },
+        },
+        'nullable': True,
+    },
     'created_by': {
         'type': 'string',
     },
@@ -176,7 +189,7 @@ instance_schema = {
                 },
                 'nullable': True,
             },
-            'secondary_route': {
+            'redirects': {
                 'type': 'list',
                 'schema': {
                     'type': 'objectid',
@@ -240,7 +253,6 @@ instance_schema = {
         'type': 'string',
         'allowed': [
             'poolb-express',
-            'poola-custom',
             'poolb-homepage',
             'WWWLegacy'],
         'default': 'poolb-express',
@@ -706,7 +718,7 @@ command_schema = {
 route_schema = {
     'route_type': {
         'type': 'string',
-        'allowed': ['poolb-express', 'poolb-homepage', 'poola-custom', 'legacy', 'redirect'],
+        'allowed': ['poolb-express', 'poolb-homepage', 'legacy', 'redirect'],
         'required': True,
     },
     'route_status': {
