@@ -204,7 +204,7 @@ instance_schema = {
             },
         },
     },
-    # TODO: Convert to non-canonical this after the migration
+    # FIXME: Convert to non-canonical this after the migration
     'path': {
         'type': 'string',
         'unique': True,
@@ -219,7 +219,7 @@ instance_schema = {
         'maxlength': 14,
         'unique': True,
     },
-    # TODO Get rid of this field, should be able to handle in route.
+    # FIXME: Get rid of this field, should be able to handle in route.
     'type': {
         'type': 'string',
         'allowed':  ['express', 'homepage'],
