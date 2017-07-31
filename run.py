@@ -77,6 +77,31 @@ def pre_patch_route_callback(request, lookup):
                 app.logger.error('Route | POST | Instance already has Primary | %s', instance)
                 abort(409, 'Error: Instance already has Primary Route.')
 
+def pre_delete_route_callback(request, lookup):
+    """
+    Make sure that this is not the active primary route for a launched instances.
+
+    :param request: flask.request object
+    :param lookup:
+    """
+    route = utilities.get_single_eve('route', lookup['_id'])
+    app.logger.debug('Route | Delete | %s', route)
+    instance_query = 'where={{"route.primary_route":"{0}"}}'.format(route['_id'])
+    instances = utilities.get_eve('instance', instance_query)
+    app.logger.debug('Route | Delete | Instances| %s', instances)
+    if not instances['_meta']['total'] == 0:
+        instance_list = []
+        for instance in instances['_items']:
+            if instance['status'] in ['launched', 'launching']:
+                # Create a list of instances that use this route.
+                # If 'sid' is a key in the instance dict use it, otherwise use '_id'.
+                if instance.get('sid'):
+                    instance_list.append(instance['sid'])
+                else:
+                    instance_list.append(instance['_id'])
+                instance_list_full = ', '.join(instance_list)
+        app.logger.error('Route | Delete | Route in Use Error | Instances | %s', instance_list_full)
+        abort(409, 'Error: Route item is in use by an instance - {0}.'.format(instance_list_full))
 
 def pre_delete_code_callback(request, lookup):
     """
@@ -562,7 +587,6 @@ app.debug = True
 
 # Request event hooks.
 app.on_pre_POST += pre_post_callback
-# TODO: If route is not a redirect, check to see if instance has primary route and reject if it does.
 app.on_pre_POST_route += pre_post_route_callback
 app.on_pre_DELETE_code += pre_delete_code_callback
 app.on_pre_DELETE_instance += pre_delete_instance_callback
