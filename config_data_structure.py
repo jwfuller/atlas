@@ -733,6 +733,7 @@ route_schema = {
     },
     # We reserve the phrase 'domainroot' to allow routing to an instance at the root of the domain
     # like www.example.com/.
+    # Cannot change this value after creation. See run.pre_patch_route_callback()
     'source': {
         'type': 'string',
         'required': True,

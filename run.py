@@ -65,8 +65,10 @@ def pre_patch_route_callback(request, lookup):
     If route is an 'express' route and has an 'instance_id', check to see if the instance already
     has a primary route and reject if it does.
 
-    :param resource: resource accessed
+    Do not allow updating of 'source' field.
+    
     :param request: flask.request object
+    :param lookup: resource accessed
     """
     # TODO: Determine if we want to reject updates to Source.
     app.logger.debug('PATCH | Route | Request - %s | Lookup - %s', request, lookup)
@@ -74,8 +76,12 @@ def pre_patch_route_callback(request, lookup):
         instance = utilities.get_single_eve('instance', request['instance_id'])
         if instance.get('routes'):
             if instance['routes'].get('primary_route'):
-                app.logger.error('Route | POST | Instance already has Primary | %s', instance)
+                app.logger.error('Route | PATCH | Instance already has Primary | %s', instance)
                 abort(409, 'Error: Instance already has Primary Route.')
+    if hasattr(request, 'source'):
+        app.logger.error('Route | PATCH | Cannot modify source | %s', instance)
+        abort(409, 'Error: Cannot modify "source" value for a Route.')
+
 
 def pre_delete_route_callback(request, lookup):
     """
