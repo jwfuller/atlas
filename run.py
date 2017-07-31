@@ -19,10 +19,19 @@ if atlas_path not in sys.path:
 
 
 # TODO Instance - On launch, activate associated routes.
-# TODO Instance - If updating instance, check to see if instance has primary route and reject if it does.
-# TODO Routes - when route is updated: remove (and create) symlinks; update f5. Depending on what is changed.
-# TODO Site - Do we allow more than one launched instance per site?
 
+# TODO: Migrate Legacy instances to Routes
+# TODO: Redirects
+#   TODO: Workflow for switching routes and converting old one to redirect.
+
+# TODO: Route
+#   TODO: Can you change the source of a route? Tentative - No
+# TODO: Route/Instance
+#   TODO: Do we allow changing of primary route for launched instance?
+#   TODO: Do we allow changing of 'instance_id' for active routes?
+#   TODO: Do we allow deactivation of primary route for launched instance? Does that un-launch an instance?
+# TODO: Site/Instance
+#   TODO: Do we allow more than one launched instance per site?
 
 # Callbacks
 def pre_post_callback(resource, request):
@@ -57,7 +66,8 @@ def pre_patch_route_callback(request, lookup):
     :param resource: resource accessed
     :param request: flask.request object
     """
-    app.logger.debug('PATCH | Route | Request - %s | Lookup - %s', resource, lookup)
+    # TODO: Determine if we want to reject updates to Source.
+    app.logger.debug('PATCH | Route | Request - %s | Lookup - %s', request, lookup)
     if hasattr(request, 'instance_id') and request['route_type'] == 'poolb-express':
         instance = utilities.get_single_eve('instance', request['instance_id'])
         if instance.get('routes'):
@@ -309,7 +319,8 @@ def on_update_code_callback(updates, original):
         name = updates['meta']['name'] if updates['meta'].get('name') else original['meta']['name']
         code_type = updates['meta']['code_type'] if updates['meta'].get('code_type') else original['meta']['code_type']
 
-        query = 'where={{"meta.name":"{0}","meta.code_type":"{1}","meta.is_current": {2}}}'.format(name, code_type, str(updates['meta']['is_current']).lower())
+        query = 'where={{"meta.name":"{0}","meta.code_type":"{1}","meta.is_current": {2}}}'.format(
+            name, code_type, str(updates['meta']['is_current']).lower())
         code_get = utilities.get_eve('code', query)
         # TODO: Filter out the item we are updating.
         app.logger.debug(code_get)
@@ -405,83 +416,93 @@ def on_update_instance_callback(updates, original):
         app.logger.debug('Ready to hand to Celery | %s | %s', instance, updates)
         tasks.instance_update.delay(instance, updates, original)
 
-def on_updated_route_callback(updates, original):
+def on_update_route_callback(updates, original):
     """
-    TODO: If changing instance, check to see if instance has primary route and reject if it does.
-    TODO: If activating, launch instance
-    TODO: If deactivating, un-launch instance
-    TODO: If changing from Express, remove symlink
+    Update a route:
 
+    See also pre_patch_route_callback().
 
-    :param items: List of dicts for new routes.
+    TODO: Redirect - If changing from Express, remove symlink
+
+    :param updates:
+    :param original:
     """
-    app.logger.debug('Route | Updated Callback | Items | %s', items)
-    for item in items:
-        app.logger.debug('Route | Updated Callback | Single Item | %s', item)
-        if item['route_status'] == 'active':
-            if item.get('instance_id'):
-                if item['route_type'] == 'poolb-express':
-                    instance = utilities.get_single_eve('instance', item['instance_id'])
-                    app.logger.debug('Route | Get Instance | %s', instance)
-                    if instance['status'] == 'installed':
-                        instance_payload = {
-                            'status': 'launching',
-                            'path': item['source'],
-                            'routes': {
-                                'primary_route': str(item['_id'])
-                            }
-                        }
-                        # Symlink creation is handled by the launch Fabric task.
-                        launch_instance = utilities.patch_eve(
-                            'instance', item['instance_id'], instance_payload)
-                        app.logger.debug('Route | Launch Instance | %s', launch_instance)
-                # TODO: Redirects
-                elif item['route_type'] == 'redirect':
-                    if environment is not 'local':
-                        instance = utilities.get_single_eve('instance', item['instance_id'])
-                        app.logger.debug('Route | Get instance | %s', instance)
-                        if instance.get('redirects'):
-                            redirects = instance['redirects']
-                            redirects.append(item['_id'])
-                        instance_payload = {
-                            'routes': {
-                                'redirect': redirects
-                            }
-                        }
-                        update_instance = utilities.patch_eve(
-                            'instance', item['instance_id'], instance_payload)
-                        app.logger.debug('Route | Update Instance | %s', update_instance)
-                        tasks.update_load_balancers.delay()
-            if item['route_type'] == 'legacy':
-                if environment is not 'local':
-                    # FIXME: Instance launch also updates load balancer.
-                    tasks.update_load_balancers.delay()
-        elif item['route_status'] == 'inactive':
-            if item['route_type'] == 'poolb-express' and item.get('instance_id'):
-                instance = utilities.get_single_eve('instance', item['instance_id'])
-                app.logger.debug('Route | Get Instance | %s', instance)
+    app.logger.debug('Route | Update | Updates - %s | Original - %s', updates, original)
+    route_status = updates['route_status'] if updates.get('route_status') else original['route_status']
+    # Activate a route
+    if (updates.get('route_status') and route_status == 'active'):
+        route_type = updates['route_type'] if updates.get('route_type') else original['route_type']
+        if route_type == 'poolb-express':
+            instance_id = updates['instance_id'] if updates.get('instance_id') else original['instance_id']
+            instance = utilities.get_single_eve('instance', instance_id)
+            app.logger.debug('Route | Update | Get Instance | %s', instance)
+            route_source = updates['source'] if updates.get('source') else original['source']
+            if instance['status'] == 'installed':
                 instance_payload = {
+                    'status': 'launching',
+                    'path': route_source,
                     'routes': {
-                        'primary_route': str(item['_id'])
+                        'primary_route': str(original['_id'])
                     }
                 }
-                update_instance = utilities.patch_eve(
-                    'instance', item['instance_id'], instance_payload)
-                app.logger.debug('Route | Update Instance | %s', update_instance)
-
-        if item.get('site_id'):
-            site = utilities.get_single_eve('site', item['site_id'])
-            app.logger.debug('Route | Get Site | %s', site)
-            if site.get('routes'):
-                routes = site['routes']
-                routes.append(item['_id'])
-            else:
-                routes = [site['routes']]
-            site_payload = {
-                'routes': routes
+                # Symlink creation is handled by the launch Fabric task.
+                launch_instance = utilities.patch_eve('instance', instance_id, instance_payload)
+                app.logger.debug('Route | Update | Launch Instance | %s', launch_instance)
+        # TODO: Redirects
+        elif route_type == 'redirect':
+            instance_id = updates['instance_id'] if updates.get('instance_id') else original['instance_id']
+            if environment is not 'local':
+                instance = utilities.get_single_eve('instance', instance_id)
+                app.logger.debug('Route | Update | Get instance | %s', instance)
+                if instance.get('redirects'):
+                    redirects = instance['redirects']
+                    redirects.append(original['_id'])
+                instance_payload = {
+                    'routes': {
+                        'redirect': redirects
+                    }
+                }
+                update_instance = utilities.patch_eve('instance', instance_id, instance_payload)
+                app.logger.debug('Route | Update | Patch Instance | %s', update_instance)
+                tasks.update_load_balancers.delay()
+        elif route_type == 'legacy':
+            if environment is not 'local':
+                # FIXME: Instance launch also updates load balancer.
+                tasks.update_load_balancers.delay()
+    # TODO: Deactivate a Route
+    elif updates.get('route_status') and route_status == 'inactive':
+        app.logger.debug('Route | Update | Deactivate Route | %s', updates)
+        tasks.update_load_balancers.delay()
+    # Update an active Route
+    # TODO: Redirects - This is most likely to impact redirects.
+    elif route_status == 'active':
+        app.logger.debug('Route | Update | Active Route | %s', updates)
+    # Update an inactive Route
+    elif route_status == 'inactive':
+        if route_type == 'poolb-express' and updates.get('instance_id'):
+            instance = utilities.get_single_eve('instance', instance_id)
+            app.logger.debug('Route | Get Instance | %s', instance)
+            instance_payload = {
+                'routes': {
+                    'primary_route': str(original['_id'])
+                }
             }
-            update_site = utilities.patch_eve('site', item['site_id'], site_payload)
-            app.logger.debug('Route | Update Site | %s', update_site)
+            update_instance = utilities.patch_eve('instance', instance_id, instance_payload)
+            app.logger.debug('Route | Update | Update Instance | %s', update_instance)
+
+    if updates.get('site_id'):
+        site = utilities.get_single_eve('site', updates['site_id'])
+        app.logger.debug('Route | Update | Get Site | %s', site)
+        if site.get('routes'):
+            routes = site['routes']
+            routes.append(updates['_id'])
+        else:
+            routes = [site['routes']]
+        site_payload = {
+            'routes': routes
+        }
+        update_site = utilities.patch_eve('site', updates['site_id'], site_payload)
+        app.logger.debug('Route | Update | Update Site | %s', update_site)
 
 
 
@@ -555,7 +576,7 @@ app.on_inserted_route += on_inserted_route_callback
 app.on_update_code += on_update_code_callback
 app.on_update_instance += on_update_instance_callback
 app.on_update_commands += on_update_commands_callback
-app.on_updated_route += on_update_route_callback
+app.on_update_route += on_update_route_callback
 # TODO: If route is not a redirect, check to see is primary route for a launched instance, reject if it is.
 #app.on_delete_item_route += on_delete_item_route_callback
 app.on_delete_item_code += on_delete_item_code_callback
