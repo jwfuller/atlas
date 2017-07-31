@@ -296,13 +296,22 @@ def instance_update(instance, updates, original):
                 instance['status'] = 'launched'
                 execute(fabfile.update_settings_file, instance=instance)
                 execute(fabfile.instance_launch, instance=instance)
-                if environment is not 'local':
-                    execute(fabfile.diff_f5)
-                    execute(fabfile.update_f5)
-                # Let fabric send patch since it is changing update group.
+                primary_route_id = instance['routes']['primary_route']
+                primary_route = utilities.get_single_eve('route', primary_route_id)
+                if primary_route['route_status'] == 'inactive':
+                    route_payload = '{"route_status": "active"}'
+                    route_patch = utilities.patch_eve('route', primary_route_id, route_payload)
+                logger.debug(route_patch)
+                redirect_route_ids = instance['routes']['redirect']
+                for redirect_route_ids as redirect_route_id:
+                    redirect_route = utilities.get_single_eve('route', redirect_route_id)
+                    if redirect_route['route_status'] == 'inactive':
+                        route_payload = '{"route_status": "active"}'
+                        route_patch = utilities.patch_eve('route', redirect_route_id, route_payload)
+                    logger.debug(route_patch)
             elif updates['status'] == 'locked':
                 logger.debug('Status changed to locked')
-                execute(fabfile.update_settings_file, site=site)
+                execute(fabfile.update_settings_file, instance=instance)
             elif updates['status'] == 'take_down':
                 logger.debug('Status changed to take_down')
                 instance['status'] = 'down'

@@ -18,7 +18,7 @@ if atlas_path not in sys.path:
     sys.path.append(atlas_path)
 
 
-# TODO Instance - On launch, activate associated routes.
+# TODO Route - Delete
 
 # TODO: Migrate Legacy instances to Routes
 # TODO: Redirects
@@ -27,11 +27,13 @@ if atlas_path not in sys.path:
 # TODO: Route
 #   TODO: Can you change the source of a route? Tentative - No
 # TODO: Route/Instance
-#   TODO: Do we allow changing of primary route for launched instance?
-#   TODO: Do we allow changing of 'instance_id' for active routes?
-#   TODO: Do we allow deactivation of primary route for launched instance? Does that un-launch an instance?
+#   TODO: Do we allow changing of primary route for launched instance? Tentative - No
+#   TODO: Do we allow changing of 'instance_id' for active routes? Tentative - No
+#   TODO: Do we allow deactivation of primary route for launched instance? Does that un-launch an instance? Tentative - No
+#   TODO: What happens to routes when you take down or delete an instance? Tentative - Deactivate routes
+#   TODO: Determine launch workflow. Proposed - Create Route and/or associate with instance as primary, launch instance or activate route.
 # TODO: Site/Instance
-#   TODO: Do we allow more than one launched instance per site?
+#   TODO: Do we allow more than one launched instance per site? Tentative - No
 
 # Callbacks
 def pre_post_callback(resource, request):
@@ -223,11 +225,9 @@ def on_inserted_route_callback(items):
                         update_instance = utilities.patch_eve(
                             'instance', item['instance_id'], instance_payload)
                         app.logger.debug('Route | Update Instance | %s', update_instance)
-                        tasks.update_load_balancers.delay()
-            if item['route_type'] == 'legacy':
-                if environment is not 'local':
-                    # FIXME: Instance launch also updates load balancer.
-                    tasks.update_load_balancers.delay()
+            # Route is active, update load balancer.
+            if environment is not 'local':
+                tasks.update_load_balancers.delay()
         elif item['route_status'] == 'inactive':
             if item['route_type'] == 'poolb-express' and item.get('instance_id'):
                 instance = utilities.get_single_eve('instance', item['instance_id'])
@@ -403,7 +403,6 @@ def on_update_instance_callback(updates, original):
                     date_json = '{{"assigned":"{0} GMT"}}'.format(updates['_updated'])
                 elif updates['status'] == 'launching':
                     date_json = '{{"launched":"{0} GMT"}}'.format(updates['_updated'])
-                    # TODO Update appropriate routes
                 elif updates['status'] == 'locked':
                     date_json = '{{"locked":""{0} GMT}}'.format(updates['_updated'])
                 elif updates['status'] == 'take_down':
@@ -464,15 +463,14 @@ def on_update_route_callback(updates, original):
                 }
                 update_instance = utilities.patch_eve('instance', instance_id, instance_payload)
                 app.logger.debug('Route | Update | Patch Instance | %s', update_instance)
-                tasks.update_load_balancers.delay()
-        elif route_type == 'legacy':
-            if environment is not 'local':
-                # FIXME: Instance launch also updates load balancer.
-                tasks.update_load_balancers.delay()
+        # Route has been activated, update load balancer
+        if environment is not 'local':
+            tasks.update_load_balancers.delay()
     # TODO: Deactivate a Route
     elif updates.get('route_status') and route_status == 'inactive':
         app.logger.debug('Route | Update | Deactivate Route | %s', updates)
-        tasks.update_load_balancers.delay()
+        if environment is not 'local':
+            tasks.update_load_balancers.delay()
     # Update an active Route
     # TODO: Redirects - This is most likely to impact redirects.
     elif route_status == 'active':
