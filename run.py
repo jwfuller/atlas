@@ -23,17 +23,18 @@ if atlas_path not in sys.path:
 # TODO: Migrate Legacy instances to Routes
 # TODO: Redirects
 #   TODO: Workflow for switching routes and converting old one to redirect.
+#   TODO: Move routes to site record
+# TODO: Figure out what we need to do to make site required
 
 # TODO: Route
-#   TODO: Can you change the source of a route? Tentative - No
+#   TODO: Can you change the source of a route? No
 # TODO: Route/Instance
-#   TODO: Do we allow changing of primary route for launched instance? Tentative - No
-#   TODO: Do we allow changing of 'instance_id' for active routes? Tentative - No
-#   TODO: Do we allow deactivation of primary route for launched instance? Does that un-launch an instance? Tentative - No
-#   TODO: What happens to routes when you take down or delete an instance? Tentative - Deactivate routes
-#   TODO: Determine launch workflow. Proposed - Create Route and/or associate with instance as primary, launch instance or activate route.
+#   TODO: Do we allow changing of primary route for launched instance? No
+#   TODO: Do we allow changing of 'instance_id' for active routes? Not for pool routes
+#   TODO: Do we allow deactivation of primary route for launched instance? No, deactivate from instance.
+#   TODO: What happens to routes when you take down or delete an instance? take down - deactivate, delete - delete
 # TODO: Site/Instance
-#   TODO: Do we allow more than one launched instance per site? Tentative - No
+#   TODO: Do we allow more than one launched instance per site? Strong No
 
 # Callbacks
 def pre_post_callback(resource, request):
