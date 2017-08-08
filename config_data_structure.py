@@ -118,7 +118,6 @@ query_schema = {
         'allowed': ["code", "instance", "site", "statistic"],
         'required': True,
     },
-    # An embedded 'strongly-typed' dictionary.
     'query': {
         'type': 'string',
         'unique': True,
