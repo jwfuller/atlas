@@ -257,7 +257,7 @@ instance_schema = {
         'schema': {
             'page_cache_maximum_age': {
                 'type': 'integer',
-                'default': 300,
+                'default': 600,
             },
             'siteimprove_site': {
                 'type': 'integer',
