@@ -163,7 +163,7 @@ def instance_provision(instance):
     :param instance: A single instance.
     :return:
     """
-    logger.debug('Instance provision - {0}'.format(instance))
+    logger.debug('Instance provision | {0}'.format(instance))
     start_time = time.time()
     # 'db_key' needs to be added here and not in Eve so that the encryption
     # works properly.
@@ -172,11 +172,11 @@ def instance_provision(instance):
     instance['status'] = 'available'
 
     try:
-        log.debug('Instance provision | Create database')
-        result_create_database = execute(fabfile.create_database, instance=instance)
+        logger.debug('Instance provision | Create database')
+        utilities.create_database(site['sid'], site['db_key'])
     except :
-        log.error('Instance provision failed | Database creation failed | %s', result_create_database)
-        return result_create_database
+        logger.error('Instance provision failed | Database creation failed')
+        raise
 
     try:
         provision_task = execute(fabfile.instance_provision, instance=instance)
@@ -185,18 +185,25 @@ def instance_provision(instance):
     except:
         logger.error('Instance provision failed | Error Message | %s', provision_task)
 
-    logger.debug('Site provision | Provision Fabric task | %s', provision_task)
-    logger.debug('Site provision | Provision Fabric task values | %s', provision_task.values)
+    logger.debug('Instance provision | Provision Fabric task | %s', provision_task)
+    logger.debug('Instance provision | Provision Fabric task values | %s', provision_task.values)
+
+    try:
+        result_correct_file_dir_permissions = execute(fabfile.correct_file_directory_permissions, site=site)
+    except:
+        logger.error('Instance provision failed | Error Message | %s', result_correct_file_dir_permissions)
+        raise
 
     try:
         install_task = execute(fabfile.instance_install, instance=instance)
         if isinstance(install_task.get('host_string', None), BaseException):
             raise install_task.get('host_string')
     except:
-        logger.error('Site install failed | Error Message | %s', install_task)
+        logger.error('Instance install failed | Error Message | %s', install_task)
+        raise
 
-    logger.debug('Site provision | Install Fabric task | %s', install_task)
-    logger.debug('Site provision | Install Fabric task values | %s', install_task.values)
+    logger.debug('Instance provision | Install Fabric task | %s', install_task)
+    logger.debug('Instance provision | Install Fabric task values | %s', install_task.values)
 
     patch_payload = {'status': 'available',
                      'db_key': instance['db_key'], 'statistics': instance['statistics']}
@@ -365,9 +372,18 @@ def instance_remove(instance):
         if not statistics['_meta']['total'] == 0:
             for statistic in statistics['_items']:
                 utilities.delete_eve('statistics', statistic['_id'])
-        execute(fabfile.instance_remove, instance=instance)
-    logger.debug('Site remove | %s', instance)
 
+        try:
+            logger.debug('Instance remove | Delete database')
+            utilities.delete_database(instance['sid'])
+        except:
+            logger.error('Instance remove failed | Database remove failed')
+            raise
+
+        execute(fabfile.instance_remove, instance=instance)
+    
+    logger.debug('Instance remove | Success')
+    
     if environment != 'local':
         execute(fabfile.update_f5)
 

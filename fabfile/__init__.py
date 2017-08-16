@@ -217,16 +217,8 @@ def instance_provision(instance):
         print 'Update symlink failed.'
         return result_update_symlink_web
 
-    try:
-        result_correct_file_dir_perms = execute(
-            correct_file_directory_permissions, instance=instance)
-    except FabricException:
-        print 'Correct file permissions failed.'
-        return result_correct_file_dir_perms
 
-
-@roles('webserver_single')
-def instance_install(instance):
+def site_install(site):
     code_dir = '{0}/{1}'.format(instances_code_root, instance['sid'])
     code_dir_current = '{0}/current'.format(code_dir)
     profile = utilities.get_single_eve('code', instance['code']['profile'])
@@ -417,8 +409,6 @@ def instance_remove(instance):
         instance['type'],
         instance['path'])
 
-    delete_database(instance)
-
     remove_symlink(web_directory)
     remove_symlink(web_directory_path)
 
@@ -429,8 +419,8 @@ def instance_remove(instance):
 
     remove_directory(code_directory)
 
-
-def correct_file_directory_permissions(instance):
+@roles('webservers')
+def correct_file_directory_permissions(site):
     code_directory_sid = '{0}/{1}/{1}'.format(instances_code_root, instance['sid'])
     web_directory_sid = '{0}/{1}/{2}'.format(instances_web_root, instance['type'], instance['sid'])
     nfs_dir = nfs_mount_location[environment]
@@ -604,49 +594,7 @@ def remove_symlink(symlink):
     run('rm -f {0}'.format(symlink))
 
 
-@runs_once
-def create_database(instance):
-    print 'Instance Provision - {0} - Create DB'.format(instance['_id'])
-    if environment != 'local':
-        os.environ['MYSQL_TEST_LOGIN_FILE'] = '/home/{0}/.mylogin.cnf'.format(
-            ssh_user)
-        mysql_login_path = "{0}_{1}".format(database_user, environment)
-        mysql_info = '{0} --login-path={1} -e'.format(mysql_path, mysql_login_path)
-        database_password = utilities.decrypt_string(instance['db_key'])
-        local('{0} \'CREATE DATABASE `{1}`;\''.format(mysql_info, instance['sid']))
-        # TODO: Make IP addresses config.
-        local("{0} \"CREATE USER '{1}'@'172.20.62.0/255.255.255.0' IDENTIFIED BY '{2}';\"".format(
-            mysql_info,
-            instance['sid'],
-            database_password))
-        sql = "GRANT ALL PRIVILEGES ON {0}.* TO '{0}'@'172.20.62.0/255.255.255.0';".format(
-            instance['sid'])
-        local("{0} \"{1}\"".format(mysql_info, sql))
-    else:
-        with settings(host_string='express.local'):
-            run("mysql -e 'create database `{}`;'".format(instance['sid']))
-
-
-@runs_once
-def delete_database(instance):
-    if environment != 'local':
-        # TODO: Make file location config.
-        os.environ['MYSQL_TEST_LOGIN_FILE'] = '/home/{0}/.mylogin.cnf'.format(
-            ssh_user)
-        mysql_login_path = "{0}_{1}".format(database_user, environment)
-        mysql_info = '{0} --login-path={1} -e'.format(mysql_path, mysql_login_path)
-        database_password = utilities.decrypt_string(instance['db_key'])
-        local('{0} \'DROP DATABASE IF EXISTS `{1}`;\''.format(mysql_info, instance['sid']))
-        # TODO: Make IP addresses config.
-        local("{0} \"DROP USER '{1}'@'172.20.62.0/255.255.255.0';\"".format(
-            mysql_info,
-            instance['sid']))
-    else:
-        with settings(host_string='express.local'):
-            run("mysql -e 'DROP DATABASE IF EXISTS `{}`;'".format(instance['sid']))
-
-
-def create_settings_files(instance, profile_name):
+def create_settings_files(site):
     sid = instance['sid']
     
     if 'route' in instance:
@@ -746,7 +694,7 @@ def create_settings_files(instance, profile_name):
                     mode='0644')
 
 
-@runs_once
+@roles('webserver_single')
 def install_instance(profile_name, code_directory_current):
     with cd(code_directory_current):
         run('drush site-install -y {0}'.format(profile_name))

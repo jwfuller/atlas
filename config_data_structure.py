@@ -242,7 +242,7 @@ instance_schema = {
     },
     'type': {
         'type': 'string',
-        'allowed':  ['custom', 'express', 'legacy', 'homepage'],
+        'allowed':  ['express', 'legacy', 'homepage'],
         'default': 'express',
     },
     'status': {
@@ -274,7 +274,6 @@ instance_schema = {
         'type': 'string',
         'allowed': [
             'poolb-express',
-            'poola-custom',
             'poolb-homepage',
             'WWWLegacy'],
         'default': 'poolb-express',
@@ -291,7 +290,7 @@ instance_schema = {
         'schema': {
             'page_cache_maximum_age': {
                 'type': 'integer',
-                'default': 600,
+                'default': 3600,
             },
             'siteimprove_site': {
                 'type': 'integer',
@@ -544,9 +543,11 @@ statistics_schema = {
                 'schema': {
                     'content_editor': {
                         'type': 'list',
+                        'nullable': True,
                     },
                     'site_contact': {
                         'type': 'list',
+                        'nullable': True,
                     },
                 },
             },
