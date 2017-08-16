@@ -1,10 +1,13 @@
 # Change log
 
-## v1.1.0
+## v2.0.0
 
-This release migrates 'sites' to 'instance' and re-adds 'site' as an optional wrapper for instances. This will setup future work to allow multiple instances of a single website.
+In this release we switch from `sites` to `instance`, `site`, and `route`.
+
+### Upgrading
 
 1. Pull new code.
+1. Stop `apache` or otherwise block write access to the API.
 1. Modify MongoDB collections and field names. `site` becomes `instance`.
     ```shell
     # Rename the sites collection
@@ -14,7 +17,15 @@ This release migrates 'sites' to 'instance' and re-adds 'site' as an optional wr
     ```
 1. Update python packages via `requirements.txt`.
 1. Restart `celery`, `celerybeat`, and `apache`.
-1. Create a command for `migrate_to_routes` and run the command to migrate from `instance['path']` to routes.
+1. Create a command for `migrate_to_version_2` and run the command to migrate from `sites` to `instance`, `site`, and `route`. One `site` will be created per `instance` and one `route` will be created for each launched instance.
+
+### New Features
+
+- `Site` multiple instances of a single website with only a single instance being active.
+
+#### Caveats
+
+- `redirect` mentioned in Route data structure has no impact at this time
 
 Resolves:
 
@@ -25,6 +36,36 @@ Resolves:
 - &#35;288 - Replace Site['path'] with Routing
 - &#35;294 - Indicate that Atlas owns all files that it templates
 - &#35;298 - Read the Docs and Sphinx support.
+
+## v1.0.22
+
+Need to:
+
+- Add variable (`database_password`) to `config_local.py`. See `config_local.py.example`.
+- Add variable (`database.port`) to `config_servers.py`. See `config_servers.py.example`.
+- Update python packages.
+
+Resolves:
+
+- &#35;282 - Provision often fails, but the instance ends up 'available'
+- &#35;317 - Switch to mysql-python connecter
+- &#35;326 - Make SO and CE user lists nullable
+
+## v1.0.21
+
+Resolves:
+
+- &#35;325 - Remove poola-custom
+- &#35;315 - Settings files - Conditional for DEV
+- &#35;319 - Adding query endpoint
+
+## v1.0.20
+
+Resolves:
+
+- &#35;313 - Fix clear APC command
+- &#35;309 - Switch to content editor
+
 ## v1.0.19
 
 Resolves:
