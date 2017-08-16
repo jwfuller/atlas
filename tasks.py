@@ -173,17 +173,10 @@ def instance_provision(instance):
 
     try:
         logger.debug('Instance provision | Create database')
-<<<<<<< HEAD
-        result_create_database = execute(fabfile.create_database, instance=instance)
-    except :
-        logger.error('Instance provision failed | Database creation failed | %s', result_create_database)
-        return result_create_database
-=======
         utilities.create_database(instance['sid'], instance['db_key'])
     except :
         logger.error('Instance provision failed | Database creation failed')
         raise
->>>>>>> dev
 
     try:
         provision_task = execute(fabfile.instance_provision, instance=instance)

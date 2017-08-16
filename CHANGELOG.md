@@ -22,6 +22,7 @@ In this release we switch from `sites` to `instance`, `site`, and `route`.
 ### New Features
 
 - `Site` multiple instances of a single website with only a single instance being active.
+- All new documentation - http://atlas-orchestration.readthedocs.io/en/latest/
 
 #### Caveats
 

@@ -26,8 +26,10 @@ if atlas_path not in sys.path:
 #   TODO: Move routes to site record
 # TODO: Figure out what we need to do to make site required
 
-# TODO: Route
-#   TODO: Can you change the source of a route? No
+# Instances:
+#   TODO: Do we create multiple instances of a site that is not launched?
+#   TODO: Can an instance be transferred to another site? Thinking about training instances: for Bundles training, clone instances could either remain under a long running training site or be moved into a short lived site for the class.
+
 # TODO: Route/Instance
 #   TODO: Do we allow changing of primary route for launched instance? No
 #   TODO: Do we allow changing of 'instance_id' for active routes? Not for pool routes

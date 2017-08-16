@@ -40,6 +40,7 @@ See `express_local`_ for setting up a local development environment.
     configuration
     running
     command-samples
+    design
     changelog
 
 .. _`Web Express`: http://www.colorado.edu/webcentral
