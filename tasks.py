@@ -310,7 +310,7 @@ def instance_update(instance, updates, original):
                     route_patch = utilities.patch_eve('route', primary_route_id, route_payload)
                 logger.debug(route_patch)
                 redirect_route_ids = instance['routes']['redirect']
-                for redirect_route_ids as redirect_route_id:
+                for redirect_route_id in redirect_route_ids:
                     redirect_route = utilities.get_single_eve('route', redirect_route_id)
                     if redirect_route['route_status'] == 'inactive':
                         route_payload = '{"route_status": "active"}'
