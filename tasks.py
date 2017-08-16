@@ -173,7 +173,7 @@ def instance_provision(instance):
 
     try:
         logger.debug('Instance provision | Create database')
-        utilities.create_database(site['sid'], site['db_key'])
+        utilities.create_database(instance['sid'], instance['db_key'])
     except :
         logger.error('Instance provision failed | Database creation failed')
         raise
@@ -189,7 +189,7 @@ def instance_provision(instance):
     logger.debug('Instance provision | Provision Fabric task values | %s', provision_task.values)
 
     try:
-        result_correct_file_dir_permissions = execute(fabfile.correct_file_directory_permissions, site=site)
+        result_correct_file_dir_permissions = execute(fabfile.correct_file_directory_permissions, instance=instance)
     except:
         logger.error('Instance provision failed | Error Message | %s', result_correct_file_dir_permissions)
         raise
@@ -309,7 +309,7 @@ def instance_update(instance, updates, original):
                 # Let fabric send patch since it is changing update group.
             elif updates['status'] == 'locked':
                 logger.debug('Status changed to locked')
-                execute(fabfile.update_settings_file, site=site)
+                execute(fabfile.update_settings_file, instance=instance)
             elif updates['status'] == 'take_down':
                 logger.debug('Status changed to take_down')
                 instance['status'] = 'down'
@@ -357,7 +357,7 @@ def instance_update(instance, updates, original):
 @celery.task
 def instance_remove(instance):
     """
-    Remove site from the server and delete Statistic item.
+    Remove instance from the server and delete Statistic item.
 
     :param instance: Item to be removed.
     :return:

@@ -137,7 +137,7 @@ load_balancer_config_files = {
     'test': 'WWWNGTestDataGroup.dat',
     'development': 'WWWNGDevDataGroup.dat',
 }
-# Entries in the f5 that are not sites.
+# Entries in the load balancer that are not instances.
 load_balancer_exceptions = [
     '/engineering/videos',
     '/law/media',

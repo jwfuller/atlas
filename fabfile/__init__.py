@@ -218,7 +218,7 @@ def instance_provision(instance):
         return result_update_symlink_web
 
 
-def site_install(site):
+def site_install(instance):
     code_dir = '{0}/{1}'.format(instances_code_root, instance['sid'])
     code_dir_current = '{0}/current'.format(code_dir)
     profile = utilities.get_single_eve('code', instance['code']['profile'])

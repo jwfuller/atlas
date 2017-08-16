@@ -62,7 +62,7 @@ CELERYBEAT_SCHEDULE = {
         'task': 'atlas.tasks.delete_stuck_pending_instances',
         'schedule': timedelta(minutes=5),
     },
-    'remove_stale_available_sites': {
+    'remove_stale_available_instances': {
         'task': 'atlas.tasks.delete_all_available_instances',
         'schedule': crontab(minute=0, hour=3),
     },

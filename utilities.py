@@ -119,12 +119,12 @@ def decrypt_string(string):
     return decrypted
 
 
-def create_database(site_sid, site_db_key):
+def create_database(instance_sid, instance_db_key):
     """
     Create a database and user for the
     :param site: site object
     """
-    print 'Create Database | {0}'.format(site_sid)
+    print 'Create Database | {0}'.format(instance_sid)
     # Start connection
     mariadb_connection = mariadb.connect(
         user=database_user,
@@ -137,22 +137,22 @@ def create_database(site_sid, site_db_key):
 
     # Create database
     try:
-        cursor.execute("CREATE DATABASE `{0}`;".format(site_sid))
+        cursor.execute("CREATE DATABASE `{0}`;".format(instance_sid))
     except mariadb.Error as error:
         print 'Create Database Error: {0}'.format(error)
         raise
 
-    instance_database_password = decrypt_string(site_db_key)
+    instance_database_password = decrypt_string(instance_db_key)
     # Add user
     try:
-        cursor.execute("CREATE USER '{0}'@'172.20.62.0/255.255.255.0' IDENTIFIED BY '{1}';".format(site_sid, instance_database_password))
+        cursor.execute("CREATE USER '{0}'@'172.20.62.0/255.255.255.0' IDENTIFIED BY '{1}';".format(instance_sid, instance_database_password))
     except mariadb.Error as error:
         print 'Create User Error: {0}'.format(error)
         raise
 
     # Grant privileges
     try:
-        cursor.execute("GRANT ALL PRIVILEGES ON {0}.* TO '{0}'@'172.20.62.0/255.255.255.0';".format(site_sid))
+        cursor.execute("GRANT ALL PRIVILEGES ON {0}.* TO '{0}'@'172.20.62.0/255.255.255.0';".format(instance_sid))
     except mariadb.Error as error:
         print 'Grant Privileges Error: {0}'.format(error)
         raise
@@ -160,16 +160,16 @@ def create_database(site_sid, site_db_key):
     mariadb_connection.commit()
     mariadb_connection.close()
 
-    print 'Create Database | {0} | Success'.format(site_sid)
+    print 'Create Database | {0} | Success'.format(instance_sid)
 
 
-def delete_database(site_sid):
+def delete_database(instance_sid):
     """
     Delete database and user
 
     :param site_id: SID for instance to remove.
     """
-    print 'Delete DB | {0}'.format(site_sid)
+    print 'Delete DB | {0}'.format(instance_sid)
     # Start connection
     host = serverdefs[environment]['database_servers']['master'] if environment != 'local' else 'express.local'
     mariadb_connection = mariadb.connect(
@@ -182,13 +182,13 @@ def delete_database(site_sid):
 
     # Drop database
     try:
-        cursor.execute("DROP DATABASE IF EXISTS `{0}`;".format(site_sid))
+        cursor.execute("DROP DATABASE IF EXISTS `{0}`;".format(instance_sid))
     except mariadb.Error as error:
         print 'Drop Database Error: {0}'.format(error)
 
     # Drop user
     try:
-        cursor.execute("DROP USER '{0}'@'172.20.62.0/255.255.255.0';".format(site_sid))
+        cursor.execute("DROP USER '{0}'@'172.20.62.0/255.255.255.0';".format(instance_sid))
     except mariadb.Error as error:
         print 'Drop User Error: {0}'.format(error)
 
