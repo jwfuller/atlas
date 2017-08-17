@@ -123,19 +123,6 @@ def pre_delete_code_callback(request, lookup):
     code = utilities.get_single_eve('code', lookup['_id'])
     app.logger.debug(code)
 
-    # Check for code that declares this as a dependency.
-    code_query = 'where={{"meta.dependency":"{0}"}}'.format(code['_id'])
-    code_items = utilities.get_eve('code', code_query)
-    app.logger.debug(code_items)
-    if not code_items['_meta']['total'] == 0:
-        code_list = []
-        for item in code_items['_items']:
-            # List of code items that declare this one as a dependency.
-            code_list.append(item['_id'])
-        code_list_full = ', '.join(code_list)
-        app.logger.error('Code Delete | Code Dependency Error | Code | %s', code_list_full)
-        abort(409, 'Error: Code item is a dependency of one or more code items.')
-
     # Check for instances using this piece of code.
     if code['meta']['code_type'] in ['module', 'theme', 'library']:
         code_type = 'package'
@@ -364,11 +351,9 @@ def on_update_code_callback(updates, original):
             request_payload = {'meta.is_current': False}
             utilities.patch_eve('code', code['_id'], request_payload)
 
-    # We need the whole record so that we can manipulate code in the right
-    # place.
-    # Copy 'original' to a new dict, then update it with values from 'updates'
-    # to create an item to deploy. Need to do the same process for meta first,
-    # otherwise the update will fully overwrite.
+    # We need the whole record so that we can manipulate code in the right place. Copy 'original' to
+    # a new dict, then update it with values from 'updates' to create an item to deploy. Need to do 
+    # the same process for meta first, otherwise the update will fully overwrite.
     if updates.get('meta'):
         meta = original['meta'].copy()
         meta.update(updates['meta'])
@@ -398,31 +383,6 @@ def on_update_instance_callback(updates, original):
             code = original['code'].copy()
             code.update(updates['code'])
             instance['code'] = code
-            dependencies_list = []
-            id_list = []
-            for key, value in updates['code'].iteritems():
-                if key == 'package':
-                    if value not in dependencies_list:
-                        # Use 'extend' vs 'append' to prevent nested list.
-                        dependencies_list.extend(value)
-                app.logger.debug(dependencies_list)
-            # List of declared dependencies is built, now we need to recurse.
-            if dependencies_list:
-                for value in dependencies_list:
-                    # Need to convert ObjectID to string for lookup.
-                    code_item = utilities.get_single_eve('code', value)
-                    app.logger.debug(code_item)
-                    if code_item['meta'].get('dependency'):
-                        for key, value in code_item['meta'].iteritems():
-                            if key == 'dependency':
-                                if value not in dependencies_list:
-                                    for list_item in value:
-                                        # Convert each id string to a proper ObjectID.
-                                        id_list.append(ObjectId(list_item))
-                                    dependencies_list.extend(id_list)
-                app.logger.debug(dependencies_list)
-                # Time to replace the package list.
-                updates['code']['package'] = dependencies_list
         if updates.get('dates'):
             dates = original['dates'].copy()
             dates.update(updates['dates'])
@@ -553,10 +513,9 @@ def on_update_commands_callback(updates, original):
     tasks.command_prepare.delay(item)
 
 
-# Update user fields on all events. If the update is coming from Drupal, it
-# will use the client_username for authentication and include the field for
-# us. If someone is querying the API directly, they will user their own
-# username and we need to add that.
+# Update user fields on all events. If the update is coming from Drupal, it will use the 
+# client_username for authentication and include the field for us. If someone is querying the API 
+# directly, they will user their own username and we need to add that.
 def pre_insert(resource, items):
     username = g.get('username', None)
     if username is not None:
