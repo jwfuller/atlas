@@ -255,7 +255,7 @@ instance_schema = {
         'type': 'boolean',
         'required': True,
         'default': False,
-    }
+    },
     'status': {
         'type': 'string',
         'allowed': [
@@ -264,7 +264,7 @@ instance_schema = {
             'lock',
             'down',
         ],
-        'default': 'pending',
+        'default': 'provision',
     },
     'environment': {
         'type': 'string',
