@@ -656,7 +656,6 @@ def update_load_balancers():
     """
     Update the load balancers with the current route information.
     """
-    execute(fabfile.diff_f5)
     execute(fabfile.update_f5)
 
 

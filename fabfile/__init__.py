@@ -786,51 +786,6 @@ def launch_instance(instance):
         utilities.patch_eve('instance', instance['_id'], payload)
 
 
-def diff_f5():
-    """
-    Copy f5 configuration file to local sever, parse txt and create or update
-    instance items.
-
-    """
-    load_balancer_config_dir = '{0}/fabfile'.format(atlas_location)
-    load_balancer_config_file = '{0}/{1}'.format(
-        load_balancer_config_dir,
-        load_balancer_config_files[environment])
-    # If an older config file exists, copy it to a backup folder.
-    if os.path.isfile(load_balancer_config_file):
-        local('mv {0} {1}/f5_backups/{2}.{3}'.format(
-            load_balancer_config_file,
-            load_balancer_config_dir,
-            load_balancer_config_files[environment],
-            str(time()).split('.')[0]))
-    # Copy config file from the f5 server to the Atlas server.
-    local('scp {0}:/config/filestore/files_d/Common_d/data_group_d/\:Common\:{1}* {2}/{1}.tmp'.format(
-        serverdefs[environment]['load_balancers'][0],
-        load_balancer_config_files[environment],
-        load_balancer_config_dir))
-
-    # Open file from f5
-    with open('{0}.tmp'.format(load_balancer_config_file), "r") as ifile:
-        data = ifile.read()
-    # Use regex to parse out path values
-    p = re.compile('"(.+/?)" := "(\w+(-\w+)?)",')
-    routes = p.findall(data)
-    # Iterate through routes found in f5 data
-    for route in routes:
-        # Get path without leading slash
-        print 'f5 | Route checking | {0}'.format(route)
-        source = route[0][1:]
-
-        route_query = 'where={{"source":"{0}"}}'.format(source)
-        api_routes = utilities.get_eve('route', route_query)
-
-        if not api_routes or len(api_routes['_items']) == 0:
-            subject = 'Route record missing'
-            message = "Source '{0}' is in the f5, but does not have a route record.".format(source)
-            utilities.send_email(message=message, subject=subject, to=devops_team)
-            print 'f5 | No Route for path | {0}'.format(source)
-
-
 def update_f5():
     # Like 'WWWNGProdDataGroup.dat'
     old_file_name = load_balancer_config_files[environment]
