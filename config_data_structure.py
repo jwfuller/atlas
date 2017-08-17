@@ -256,7 +256,7 @@ instance_schema = {
         'required': True,
         'default': False,
     },
-    'status': {
+    'state': {
         'type': 'string',
         'allowed': [
             'provision',
@@ -341,7 +341,6 @@ instance_schema = {
             },
         },
     },
-    # TODO: Migrate old dates
     'dates': {
         'type': 'dict',
         'schema': {
@@ -745,6 +744,11 @@ command_schema = {
 route_schema = {
     'route_type': {
         'type': 'string',
+        'allowed': ['express', 'legacy', 'redirect'],
+        'required': True,
+    },
+    'route_pool': {
+        'type': 'string',
         'allowed': ['poolb-express', 'poolb-homepage', 'legacy', 'redirect', 'osr-varnish-https'],
         'required': True,
     },
@@ -753,7 +757,7 @@ route_schema = {
         'required': True,
         'default': False,
     },
-    'active_on_launch': {
+    'activate_with_site': {
         'type': 'boolean',
         'required': True,
         'default': False,
@@ -782,13 +786,6 @@ route_schema = {
             302,
             307
         ],
-    },
-    'instance_id': {
-        'type': 'objectid',
-        'data_relation': {
-            'resource': 'instance',
-            'field': '_id',
-        },
     },
     'site_id': {
         'type': 'objectid',

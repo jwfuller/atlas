@@ -79,7 +79,7 @@ def pre_delete_route_callback(request, lookup):
     if not instances['_meta']['total'] == 0:
         instance_list = []
         for instance in instances['_items']:
-            if instance['status'] in ['launched', 'launching']:
+            if instance['state'] in ['launched', 'launching']:
                 # Create a list of instances that use this route.
                 # If 'sid' is a key in the instance dict use it, otherwise use '_id'.
                 if instance.get('sid'):
@@ -197,9 +197,9 @@ def on_inserted_route_callback(items):
                 if item['route_type'] == 'poolb-express':
                     instance = utilities.get_single_eve('instance', item['instance_id'])
                     app.logger.debug('Route | Get Instance | %s', instance)
-                    if instance['status'] == 'installed':
+                    if instance['state'] == 'installed':
                         instance_payload = {
-                            'status': 'launching',
+                            'state': 'launching',
                             'path': item['source'],
                             'routes': {
                                 'primary_route': str(item['_id'])
@@ -368,17 +368,17 @@ def on_update_instance_callback(updates, original):
             settings.update(updates['settings'])
             instance['settings'] = settings
 
-        if updates.get('status'):
-            if updates['status'] in ['installing', 'launching', 'take_down', 'restore']:
-                if updates['status'] == 'installing':
+        if updates.get('state'):
+            if updates['state'] in ['installing', 'launching', 'take_down', 'restore']:
+                if updates['state'] == 'installing':
                     date_json = '{{"assigned":"{0} GMT"}}'.format(updates['_updated'])
-                elif updates['status'] == 'launching':
+                elif updates['state'] == 'launching':
                     date_json = '{{"launched":"{0} GMT"}}'.format(updates['_updated'])
-                elif updates['status'] == 'locked':
+                elif updates['state'] == 'locked':
                     date_json = '{{"locked":""{0} GMT}}'.format(updates['_updated'])
-                elif updates['status'] == 'take_down':
+                elif updates['state'] == 'take_down':
                     date_json = '{{"taken_down":"{0} GMT"}}'.format(updates['_updated'])
-                elif updates['status'] == 'restore':
+                elif updates['state'] == 'restore':
                     date_json = '{{"taken_down":"{0} GMT"}}'.format(updates['_updated'])
 
                 updates['dates'] = json.loads(date_json)
@@ -408,9 +408,9 @@ def on_update_route_callback(updates, original):
             instance = utilities.get_single_eve('instance', instance_id)
             app.logger.debug('Route | Update | Get Instance | %s', instance)
             route_source = updates['source'] if updates.get('source') else original['source']
-            if instance['status'] == 'installed':
+            if instance['state'] == 'installed':
                 instance_payload = {
-                    'status': 'launching',
+                    'state': 'launching',
                     'path': route_source,
                     'routes': {
                         'primary_route': str(original['_id'])

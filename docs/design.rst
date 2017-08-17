@@ -11,8 +11,9 @@ Sites
 
 A Site is a set of Instances and Routes.
 
-* Only 1 Instance can be ``active`` per Site.
+* Only one Instance can be ``active`` per Site.
 * You cannot change the ``primary_route`` of an Site after it is made ``active``.
+* You cannot deactivate the ``primary_route`` for an ``active`` Site.
 * When a Site is deleted, related Routes and Instances are deleted.
 
 Instances
@@ -20,8 +21,10 @@ Instances
 
 An Instance is an individual installation of Drupal.
 
+* Only one Instance can be ``active`` per Site.
 * When a Site is deleted, related Instances are deleted.
 * Instances can be cloned from any state.
+* All Instances that are not in a ``provision`` state, 
 
 
 Routes
@@ -30,8 +33,8 @@ Routes
 A Route represents an entry in the load balancer or on the redirect server.
 
 * You cannot change the ``source`` of a Route after it has been created.
-* You cannot change the ``site_id`` or ``instance_id`` of a Route when it is active. 
-* You cannot deactivate the ``primary_route`` for an active Site and/or Instance.
+* You cannot change the ``site_id`` of a Route when it is active. 
+* You cannot deactivate the ``primary_route`` for an active Site.
 * When a Site is deactivated, related Routes are not changed.
 * When a Site is deleted, related Routes are deleted.
 

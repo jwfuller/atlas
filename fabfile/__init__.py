@@ -420,7 +420,7 @@ def instance_remove(instance):
     remove_directory(code_directory)
 
 @roles('webservers')
-def correct_file_directory_permissions(site):
+def correct_file_directory_permissions(instance):
     code_directory_sid = '{0}/{1}/{1}'.format(instances_code_root, instance['sid'])
     web_directory_sid = '{0}/{1}/{2}'.format(instances_web_root, instance['type'], instance['sid'])
     nfs_dir = nfs_mount_location[environment]
@@ -594,7 +594,7 @@ def remove_symlink(symlink):
     run('rm -f {0}'.format(symlink))
 
 
-def create_settings_files(site):
+def create_settings_files(instance):
     sid = instance['sid']
     
     if 'route' in instance:
