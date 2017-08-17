@@ -69,7 +69,7 @@ def pre_patch_route_callback(request, lookup):
     has a primary route and reject if it does.
 
     Do not allow updating of 'source' field.
-    
+
     :param request: flask.request object
     :param lookup: resource accessed
     """
@@ -111,6 +111,7 @@ def pre_delete_route_callback(request, lookup):
                 instance_list_full = ', '.join(instance_list)
         app.logger.error('Route | Delete | Route in Use Error | Instances | %s', instance_list_full)
         abort(409, 'Error: Route item is in use by an instance - {0}.'.format(instance_list_full))
+
 
 def pre_delete_code_callback(request, lookup):
     """
@@ -449,6 +450,7 @@ def on_update_instance_callback(updates, original):
         app.logger.debug('Ready to hand to Celery | %s | %s', instance, updates)
         tasks.instance_update.delay(instance, updates, original)
 
+
 def on_update_route_callback(updates, original):
     """
     Update a route:
@@ -463,7 +465,7 @@ def on_update_route_callback(updates, original):
     app.logger.debug('Route | Update | Updates - %s | Original - %s', updates, original)
     route_status = updates['route_status'] if updates.get('route_status') else original['route_status']
     # Activate a route
-    if (updates.get('route_status') and route_status == 'active'):
+    if updates.get('route_status') and route_status == 'active':
         route_type = updates['route_type'] if updates.get('route_type') else original['route_type']
         if route_type == 'poolb-express':
             instance_id = updates['instance_id'] if updates.get('instance_id') else original['instance_id']
@@ -537,7 +539,6 @@ def on_update_route_callback(updates, original):
         app.logger.debug('Route | Update | Update Site | %s', update_site)
 
 
-
 def on_update_commands_callback(updates, original):
     """
     Run commands when API endpoints are called.
@@ -547,7 +548,8 @@ def on_update_commands_callback(updates, original):
     """
     item = original.copy()
     item.update(updates)
-    app.logger.debug('Update command | Item | %s | Update | %s | Original | %s', item, updates, original)
+    app.logger.debug('Update command | Item | %s | Update | %s | Original | %s',
+                     item, updates, original)
     tasks.command_prepare.delay(item)
 
 
