@@ -12,18 +12,18 @@ Cronological tasks
 ---------------------
 
 * Every 5 minutes
-    * Available instances check - Maintains 5 ``available`` instances
-    * Delete stuck 'pending' instances - Cleans up instances that fail to provision correctly.
+    * Provisioned instances check - Maintains 5 instances that can be allocated to Sites.
+    * Delete failed provisions - Cleans up instances that fail to provision correctly.
 * Every 60 minutes
-    * Cron - 'launched' instances
+    * Cron - ``active: true`` instances
     * Remove orphan statistics - Remove statistics items that do not have a corelating instance record.
 * Every 2 hours
     * Cron - instances with the ``cu_classes_bundle``
     * Take down old installed instances - On non-production environments, remove isntalled instances that are more than 35 days old.
 * Every 3 hours
-    * Cron - 'installed' instances
+    * Cron - ``active: false`` instances
 * Every 24 hours
-    * Replace available instances - Serves as routine integration testing.
+    * Replace provisioned instances - Serves as routine integration testing.
     * Verify statistics updating - Verify that active statistics items have been updated in the last 36 hours.
 
 Code
@@ -51,53 +51,27 @@ How to create or update code:
 * Version with error and new version does not require an update hook - **PATCH** existing code item
 * Version with error and new version *does* require an update hook - **POST** new code item
 
-Instances and Routes
--------------
-
-Instance items are created with a ``pending`` status and can be assigned a specific core and/or profile when created. If a core or profile is not specified, the 'current' version of the default is used.
-
-Instance states
-~~~~~~~~~~~~~~~~~~~~~
-* Instances are created in a ``pending`` state, this state triggers the provision.
-* After an instance is provisioned and the Drupal installation is run, the state is moved to ``available``.
-    * Cron is not run on ``available`` instances and packages cannot be added to instances in this state.
-* When a user is invited or otherwise allocated an instance the state should be changed to ``installing``.
-    * The settings files for the instance is updated.
-    * Cron is run on instances in this state.
-    * State ends on ``installed`` and packages can now be added.
-* ``launching`` requires a ``primary_route``
-    * Update settings files.
-    * Activates any associated routes that are ``active_on_launch: True``.
-    * Create symlinks from route ``source`` in the web root to the code root.
-
-
-Route states
-~~~~~~~~~~~~~~~~~~~~~
-
-* ``'route_status': 'active'``
-    * Only ``active`` routes are added to the load balancer.
-    * ``active`` routes can only be associated with a ``launched`` instance.
-* If a route is associated with an instance, and has ``active_on_launch: True`` and ``'route_status': 'inactive'``
-
-
 Create an instance
 ~~~~~~~~~~~~~~~~~~~~~~
+
 .. code-block:: bash
 
-    curl -i -v -X POST -d '{"status": "pending"}' -H 'Content-Type: application/json' -u 'USERNAME' https://127.0.0.1/atlas/instance
+    curl -i -v -X POST -d '{"state": "provison"}' -H 'Content-Type: application/json' -u 'USERNAME' https://127.0.0.1/atlas/instance
 
 Update an instance
 ~~~~~~~~~~~~~~~~~~~~~
-* Update the 'status' of an Instance to 'installed'
+
+* Update the 'state' of an Instance to 'allocate'
+    
     .. code-block:: bash
 
-        curl -i -v -X PATCH -d '{"status": "installed"}' -H "If-Match: 4173813fc614292febc79241a8b677266cbed826" -H 'Content-Type: application/json' -u 'USERNAME' https://127.0.0.1/atlas/instance/
+        curl -i -v -X PATCH -d '{"state": "allocate"}' -H "If-Match: 4173813fc614292febc79241a8b677266cbed826" -H 'Content-Type: application/json' -u 'USERNAME' https://127.0.0.1/atlas/instance/
 
 * Update the 'profile' and 'core' of an Instance
+    
     .. code-block:: bash
 
         curl -i -v -X PATCH -d '{"meta": {"core": "[code_id]", "profile":"[profile_id]"}}' -H "If-Match: [etag]" -H 'Content-Type: application/json' -u 'USERNAME' https://127.0.0.1/atlas/instance/
-
 
 Commands
 ---------------

@@ -24,7 +24,38 @@ An Instance is an individual installation of Drupal.
 * Only one Instance can be ``active`` per Site.
 * When a Site is deleted, related Instances are deleted.
 * Instances can be cloned from any state.
-* All Instances that are not in a ``provision`` state, 
+* Instances are created with the following:
+
+    .. code-block:: python
+
+        'instance': {
+            'state': 'provision',
+            'needs_work': true,
+            'instance_active': false,
+            'site_id': null
+        }
+
+* After an Instance is created on the servers and the Drupal installation is run:
+
+    .. code-block:: python
+
+        'instance': {
+            'state': 'provision',
+            'needs_work': false,
+            'instance_active': false,
+            'site_id': null
+        }
+
+    * Cron is not run on these instances and packages cannot be added to instances in this state.
+
+* An Instance is allocated to a Site
+    * The settings files for the instance is updated.
+    * Cron is run on instances in this state.
+    * State ends on ``installed`` and packages can now be added.
+* ``launching`` requires a ``primary_route``
+    * Update settings files.
+    * Activates any associated routes that are ``active_on_launch: True``.
+    * Create symlinks from route ``source`` in the web root to the code root.
 
 
 Routes
@@ -32,6 +63,7 @@ Routes
 
 A Route represents an entry in the load balancer or on the redirect server.
 
+* Only active routes are added to the load balancer.
 * You cannot change the ``source`` of a Route after it has been created.
 * You cannot change the ``site_id`` of a Route when it is active. 
 * You cannot deactivate the ``primary_route`` for an active Site.
