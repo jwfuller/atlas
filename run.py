@@ -17,15 +17,6 @@ atlas_path = '/data/code'
 if atlas_path not in sys.path:
     sys.path.append(atlas_path)
 
-
-# TODO Route - Delete
-
-# TODO: Migrate Legacy instances to Routes
-# TODO: Redirects
-#   TODO: Workflow for switching routes and converting old one to redirect.
-#   TODO: Move routes to site record
-# TODO: Figure out what we need to do to make site required
-
 # Callbacks
 def pre_post_callback(resource, request):
     """
@@ -61,7 +52,6 @@ def pre_patch_route_callback(request, lookup):
     :param request: flask.request object
     :param lookup: resource accessed
     """
-    # TODO: Determine if we want to reject updates to Source.
     app.logger.debug('PATCH | Route | Request - %s | Lookup - %s', request, lookup)
     if hasattr(request, 'instance_id') and request['route_type'] == 'poolb-express':
         instance = utilities.get_single_eve('instance', request['instance_id'])
@@ -219,22 +209,22 @@ def on_inserted_route_callback(items):
                         launch_instance = utilities.patch_eve(
                             'instance', item['instance_id'], instance_payload)
                         app.logger.debug('Route | Launch Instance | %s', launch_instance)
-                # TODO: Redirects
-                elif item['route_type'] == 'redirect':
-                    if environment is not 'local':
-                        instance = utilities.get_single_eve('instance', item['instance_id'])
-                        app.logger.debug('Route | Get instance | %s', instance)
-                        if instance.get('redirects'):
-                            redirects = instance['redirects']
-                            redirects.append(item['_id'])
-                        instance_payload = {
-                            'routes': {
-                                'redirect': redirects
-                            }
-                        }
-                        update_instance = utilities.patch_eve(
-                            'instance', item['instance_id'], instance_payload)
-                        app.logger.debug('Route | Update Instance | %s', update_instance)
+                # TODO: Add support for redirects
+                # elif item['route_type'] == 'redirect':
+                #     if environment is not 'local':
+                #         instance = utilities.get_single_eve('instance', item['instance_id'])
+                #         app.logger.debug('Route | Get instance | %s', instance)
+                #         if instance.get('redirects'):
+                #             redirects = instance['redirects']
+                #             redirects.append(item['_id'])
+                #         instance_payload = {
+                #             'routes': {
+                #                 'redirect': redirects
+                #             }
+                #         }
+                #         update_instance = utilities.patch_eve(
+                #             'instance', item['instance_id'], instance_payload)
+                #         app.logger.debug('Route | Update Instance | %s', update_instance)
             # Route is active, update load balancer.
             if environment is not 'local':
                 tasks.update_load_balancers.delay()
@@ -324,15 +314,13 @@ def on_update_code_callback(updates, original):
     app.logger.debug(original)
     # If this 'is_current' PATCH code with the same name and code_type.
     if updates.get('meta') and updates['meta'].get('is_current') and updates['meta']['is_current'] is True:
-        # If the name and code_type are not changing, we need to load them from
-        # the original.
+        # If the name and code_type are not changing, we need to load them from the original.
         name = updates['meta']['name'] if updates['meta'].get('name') else original['meta']['name']
         code_type = updates['meta']['code_type'] if updates['meta'].get('code_type') else original['meta']['code_type']
 
         query = 'where={{"meta.name":"{0}","meta.code_type":"{1}","meta.is_current": {2}}}'.format(
             name, code_type, str(updates['meta']['is_current']).lower())
         code_get = utilities.get_eve('code', query)
-        # TODO: Filter out the item we are updating.
         app.logger.debug(code_get)
 
         for code in code_get['_items']:
@@ -431,32 +419,31 @@ def on_update_route_callback(updates, original):
                 # Symlink creation is handled by the launch Fabric task.
                 launch_instance = utilities.patch_eve('instance', instance_id, instance_payload)
                 app.logger.debug('Route | Update | Launch Instance | %s', launch_instance)
-        # TODO: Redirects
-        elif route_type == 'redirect':
-            instance_id = updates['instance_id'] if updates.get('instance_id') else original['instance_id']
-            if environment is not 'local':
-                instance = utilities.get_single_eve('instance', instance_id)
-                app.logger.debug('Route | Update | Get instance | %s', instance)
-                if instance.get('redirects'):
-                    redirects = instance['redirects']
-                    redirects.append(original['_id'])
-                instance_payload = {
-                    'routes': {
-                        'redirect': redirects
-                    }
-                }
-                update_instance = utilities.patch_eve('instance', instance_id, instance_payload)
-                app.logger.debug('Route | Update | Patch Instance | %s', update_instance)
+        # TODO: Add support for Redirects
+        # elif route_type == 'redirect':
+        #     instance_id = updates['instance_id'] if updates.get('instance_id') else original['instance_id']
+        #     if environment is not 'local':
+        #         instance = utilities.get_single_eve('instance', instance_id)
+        #         app.logger.debug('Route | Update | Get instance | %s', instance)
+        #         if instance.get('redirects'):
+        #             redirects = instance['redirects']
+        #             redirects.append(original['_id'])
+        #         instance_payload = {
+        #             'routes': {
+        #                 'redirect': redirects
+        #             }
+        #         }
+        #         update_instance = utilities.patch_eve('instance', instance_id, instance_payload)
+        #         app.logger.debug('Route | Update | Patch Instance | %s', update_instance)
         # Route has been activated, update load balancer
         if environment is not 'local':
             tasks.update_load_balancers.delay()
-    # TODO: Deactivate a Route
     elif updates.get('route_status') and route_status == 'inactive':
         app.logger.debug('Route | Update | Deactivate Route | %s', updates)
         if environment is not 'local':
             tasks.update_load_balancers.delay()
     # Update an active Route
-    # TODO: Redirects - This is most likely to impact redirects.
+    # TODO: Add support for Redirects - This is most likely to impact redirects.
     elif route_status == 'active':
         app.logger.debug('Route | Update | Active Route | %s', updates)
     # Update an inactive Route
