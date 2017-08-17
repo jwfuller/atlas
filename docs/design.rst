@@ -20,7 +20,6 @@ Instances
 
 An Instance is an individual installation of Drupal.
 
-* You cannot change the ``primary_route`` of an Instance after it is made ``active``.
 * When a Site is deleted, related Instances are deleted.
 * Instances can be cloned from any state.
 
@@ -216,13 +215,16 @@ State flow
 General Notes
 -----------------------
 
-* Training instances can be setup as follows
+Training instances
+~~~~~~~~~~~~~~~~~~~
+
+Can be setup as clones of an active Instance.
 
 .. code-block:: python
 
         'site': {
             'site_active': true,
-            'instance': ['instance_id' ,'instance_2_id'],
+            'instance': ['instance_id' ,'instance_2_id','instance_3_id','instance_4_id'],
             'primary_route': 'route_id'
         }
 
@@ -243,4 +245,18 @@ General Notes
             'instance_active': false,
             'site': 'site_id',
             'description': 'Instance for Bill - Training on June 10, 2017'
+        }
+
+        'instance_3': {
+            'state': 'allocate',
+            'instance_active': false,
+            'site': 'site_id',
+            'description': 'Instance for Jane - Training on June 10, 2017'
+        }
+
+        'instance_4': {
+            'state': 'allocate',
+            'instance_active': false,
+            'site': 'site_id',
+            'description': 'Instance for Pat - Training on June 10, 2017'
         }
