@@ -1,12 +1,16 @@
 import os
 
+"""
+Eve Configuration
+"""
+
 MONGO_HOST = os.environ.get('MONGO_HOST', 'localhost')
 MONGO_PORT = os.environ.get('MONGO_PORT', 27017)
 MONGO_DBNAME = os.environ.get('MONGO_DBNAME', 'atlas')
 
 DATE_FORMAT = '%Y-%m-%d %H:%M:%S GMT'
 
-# Enable reads (GET), inserts (POST), and DELETE for resources/collections.
+# Enable reads (GET), and inserts (POST) for resources/collections.
 RESOURCE_METHODS = ['GET', 'POST']
 
 # Enable reads (GET), edits (PATCH), replacements (PUT), and deletes of
@@ -31,16 +35,19 @@ MONGO_QUERY_BLACKLIST = ['$where']
 ENFORCE_IF_MATCH = True
 
 DEBUG = True
-# Definitions of schemas for Items. Schema is based on Cerberus grammar
-# https://github.com/nicolaiarocci/cerberus.
-#
 
-# Mongo creates the following: '_created', '_updated', '_etag', and '_id'.
-# We don't use those fields in our logic because want to be able to move or
-# recreate a record without losing any information.
+"""
+Schemas
 
-# Code schema. Defines a code asset that can be applied to an instance.
-# We nest in 'meta' to allow us to check for a unique combo
+Definitions of schemas for Items. Schema is based on Cerberus grammar 
+https://github.com/nicolaiarocci/cerberus.
+
+Mongo creates the following: '_created', '_updated', '_etag', and '_id'. We 
+don't use those fields in our logic because want to be able to move or recreate 
+a record without losing any information.
+"""
+
+# Code schema.
 code_schema = {
     'meta': {
         'type': 'dict',
@@ -93,7 +100,7 @@ code_schema = {
     },
 }
 
-# Query Schema
+# Query Schema.
 query_schema = {
     'title': {
         'type': 'string',
@@ -128,18 +135,12 @@ query_schema = {
     },
 }
 
-# site schema.
+# Site schema.
 site_schema = {
-    'instance': {
-        'type': 'list',
-        'schema': {
-            'type': 'objectid',
-            'data_relation': {
-                'resource': 'instance',
-                'field': '_id',
-                'embeddable': True,
-            },
-        }
+    'site_active': {
+        'type': 'boolean',
+        'required': True,
+        'default': False,
     },
     'site_type': {
         'type': 'string',
@@ -167,37 +168,16 @@ site_schema = {
             'other'
         ],
     },
-    'routes': {
+    'instance': {
         'type': 'list',
         'schema': {
             'type': 'objectid',
             'data_relation': {
-                'resource': 'route',
+                'resource': 'instance',
                 'field': '_id',
                 'embeddable': True,
-                'unique': True,
             },
-        },
-        'nullable': True,
-    },
-    'created_by': {
-        'type': 'string',
-    },
-    'modified_by': {
-        'type': 'string',
-    },
-}
-
-
-# Instance schema.
-instance_schema = {
-    'site': {
-        'type': 'objectid',
-        'data_relation': {
-            'resource': 'site',
-            'field': '_id',
-            'embeddable': True,
-        },
+        }
     },
     'routes': {
         'type': 'dict',
@@ -227,12 +207,35 @@ instance_schema = {
             },
         },
     },
+    'created_by': {
+        'type': 'string',
+    },
+    'modified_by': {
+        'type': 'string',
+    },
+}
+
+
+# Instance schema.
+instance_schema = {
+    'site': {
+        'type': 'objectid',
+        'data_relation': {
+            'resource': 'site',
+            'field': '_id',
+            'embeddable': True,
+        },
+    },
     # FIXME: Convert to non-canonical this after the migration
     'path': {
         'type': 'string',
         'unique': True,
     },
     'db_key': {
+        'type': 'string',
+    },
+    # Supports user's indicating the purpose of the instance.
+    'description': {
         'type': 'string',
     },
     # Leave in 'instance' since value would not be moved between instances.
@@ -242,25 +245,24 @@ instance_schema = {
         'maxlength': 14,
         'unique': True,
     },
-    # FIXME: Get rid of this field, should be able to handle in route.
+    # TODO: Get rid of this field, should be able to handle in route.
     'type': {
         'type': 'string',
         'allowed':  ['express', 'legacy', 'homepage'],
         'default': 'express',
     },
+    'instance_active': {
+        'type': 'boolean',
+        'required': True,
+        'default': False,
+    }
     'status': {
         'type': 'string',
         'allowed': [
-            'pending',
-            'available',
-            'installing',
-            'installed',
-            'launching',
-            'launched',
-            'locked',
-            'take_down',
+            'provision',
+            'allocate',
+            'lock',
             'down',
-            'restore',
         ],
         'default': 'pending',
     },
@@ -278,13 +280,14 @@ instance_schema = {
         'allowed': [
             'poolb-express',
             'poolb-homepage',
-            'WWWLegacy'],
+            'WWWLegacy',
+            'osr-varnish-https'],
         'default': 'poolb-express',
     },
     'update_group': {
         'type': 'integer',
     },
-    'import_from_inventory': {
+    'migrated': {
         'type': 'boolean',
         'default': False
     },
@@ -338,24 +341,22 @@ instance_schema = {
             },
         },
     },
+    # TODO: Migrate old dates
     'dates': {
         'type': 'dict',
         'schema': {
             # See https://docs.python.org/2/library/datetime.html#datetime.datetime for datetime
             # format.
-            'created': {
+            'provision': {
                 'type': 'datetime',
             },
-            'assigned': {
+            'allocate': {
                 'type': 'datetime',
             },
-            'launched': {
+            'lock': {
                 'type': 'datetime',
             },
-            'locked': {
-                'type': 'datetime',
-            },
-            'taken_down': {
+            'down': {
                 'type': 'datetime',
             },
         },
@@ -744,17 +745,18 @@ command_schema = {
 route_schema = {
     'route_type': {
         'type': 'string',
-        'allowed': ['poolb-express', 'poolb-homepage', 'legacy', 'redirect'],
+        'allowed': ['poolb-express', 'poolb-homepage', 'legacy', 'redirect', 'osr-varnish-https'],
         'required': True,
     },
-    'route_status': {
-        'type': 'string',
-        'allowed': ['active', 'inactive'],
+    'route_active': {
+        'type': 'boolean',
         'required': True,
+        'default': False,
     },
     'active_on_launch': {
         'type': 'boolean',
         'required': True,
+        'default': False,
     },
     # We reserve the phrase 'domainroot' to allow routing to an instance at the root of the domain
     # like www.example.com/.
