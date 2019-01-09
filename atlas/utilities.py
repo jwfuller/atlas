@@ -1,11 +1,15 @@
 """
 Utility functions.
 """
+import os
 import sys
 import logging
 import json
+import subprocess
+import stat
 import smtplib
-from re import compile as re_compile
+import re
+from math import ceil
 from random import choice
 from string import lowercase
 from hashlib import sha1
@@ -25,8 +29,10 @@ from atlas.config import (ATLAS_LOCATION, ALLOWED_USERS, LDAP_SERVER, LDAP_ORG_U
                           SERVICE_ACCOUNT_USERNAME, SERVICE_ACCOUNT_PASSWORD, SSL_VERIFICATION,
                           SLACK_USERNAME, SLACK_URL, SEND_NOTIFICATION_EMAILS,
                           SEND_NOTIFICATION_FROM_EMAIL, EMAIL_HOST, EMAIL_PORT, EMAIL_USERNAME,
-                          EMAIL_PASSWORD)
+                          EMAIL_PASSWORD, EMAIL_USERS_EXCLUDE, SAML_AUTH, CODE_ROOT,
+                          INSTANCE_CODE_IGNORE_REGEX)
 from atlas.config_servers import (SERVERDEFS, API_URLS)
+from atlas.data_structure import PAGINATION_DEFAULT
 
 # Setup a sub-logger. See tasks.py for longer comment.
 log = logging.getLogger('atlas.utilities')
@@ -40,7 +46,7 @@ class AtlasBasicAuth(BasicAuth):
     """
     Basic Authentication
     """
-    def check_auth(self, username, password):
+    def check_auth(self, username, password, allowed_roles=['default'], resource='default', method='default'):
         """
         Check user supplied credentials against LDAP.
         """
@@ -51,16 +57,6 @@ class AtlasBasicAuth(BasicAuth):
         # methods for performing LDAP operations and retrieving information about the LDAP
         # connection and transactions.
         l = ldap.initialize(LDAP_SERVER)
-
-        # Start the connection using TLS.
-        try:
-            l.start_tls_s()
-        except ldap.LDAPError, e:
-            log.error(e.message)
-            if type(e.message) == dict and e.message.has_key('desc'):
-                log.error(e.message['desc'])
-            else:
-                log.error(e)
 
         ldap_distinguished_name = "uid={0},ou={1},{2}".format(
             username, LDAP_ORG_UNIT, LDAP_DNS_DOMAIN_NAME)
@@ -149,34 +145,22 @@ def create_database(site_sid, site_db_key):
 
     # Create database
     try:
-        cursor.execute("CREATE DATABASE `{0}`;".format(site_sid))
+        cursor.execute("CREATE DATABASE IF NOT EXISTS `{0}`;".format(site_sid))
     except mariadb.Error as error:
         log.error('Create Database | %s | %s', site_sid, error)
         raise
 
     instance_database_password = decrypt_string(site_db_key)
-    # Add user
+    # Grant privileges/add user
     try:
         if ENVIRONMENT != 'local':
-            cursor.execute("CREATE USER '{0}'@'{1}' IDENTIFIED BY '{2}';".format(
+            cursor.execute("GRANT ALL PRIVILEGES ON {0}.* TO '{0}'@'{1}' IDENTIFIED BY '{2}';".format(
                 site_sid,
-                SERVERDEFS[ENVIRONMENT]['database_servers']['user_ip_range'],
+                SERVERDEFS[ENVIRONMENT]['database_servers']['user_host_pattern'],
                 instance_database_password))
         else:
-            cursor.execute("CREATE USER '{0}'@'localhost' IDENTIFIED BY '{1}';".format(
+            cursor.execute("GRANT ALL PRIVILEGES ON {0}.* TO '{0}'@'localhost' IDENTIFIED BY '{1}';".format(
                 site_sid, instance_database_password))
-    except mariadb.Error as error:
-        log.error('Create User | %s | %s', site_sid, error)
-        raise
-
-    # Grant privileges
-    try:
-        if ENVIRONMENT != 'local':
-            cursor.execute("GRANT ALL PRIVILEGES ON {0}.* TO '{0}'@'{1}';".format(
-                site_sid,
-                SERVERDEFS[ENVIRONMENT]['database_servers']['user_ip_range']))
-        else:
-            cursor.execute("GRANT ALL PRIVILEGES ON {0}.* TO '{0}'@'localhost';".format(site_sid))
     except mariadb.Error as error:
         log.error('Grant Privileges | %s | %s', site_sid, error)
         raise
@@ -211,9 +195,9 @@ def delete_database(site_sid):
 
     # Drop user
     try:
-        cursor.execute("DROP USER '{0}'@'{1}0';".format(
+        cursor.execute("DROP USER '{0}'@'{1}';".format(
             site_sid,
-            SERVERDEFS[ENVIRONMENT]['database_servers']['user_ip_range']))
+            SERVERDEFS[ENVIRONMENT]['database_servers']['user_host_pattern']))
     except mariadb.Error as error:
         log.error('Drop User | %s | %s', site_sid, error)
 
@@ -231,38 +215,84 @@ def post_eve(resource, payload):
     """
     url = "{0}/{1}".format(API_URLS[ENVIRONMENT], resource)
     headers = {"content-type": "application/json"}
+
+    r = requests.post(url, auth=(SERVICE_ACCOUNT_USERNAME, SERVICE_ACCOUNT_PASSWORD),
+                      headers=headers, verify=SSL_VERIFICATION, data=json.dumps(payload))
+
     try:
-        r = requests.post(url, auth=(SERVICE_ACCOUNT_USERNAME, SERVICE_ACCOUNT_PASSWORD), headers=headers, verify=SSL_VERIFICATION, data=json.dumps(payload))
-    except Exception as error:
-        log.error('POST to Atlas | URL - %s | Error - %s', url, error)
+        r.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        # Wasn't a 200
+        log.error('POST to Atlas | URL - %s | Error - %s', url, r.json())
+        return r.json()
 
     return r.json()
 
 
 def get_eve(resource, query=None):
     """
-    Make calls to the Atlas API.
+    Make calls to the Atlas API. This handles situations where there are many pages of results.
 
     :param resource:
     :param query: argument string
-    :return: dict of items that match the query string.
+    :return: json result of request.
     """
+    url = API_URLS[ENVIRONMENT] + '/' + resource
     if query:
-        url = "{0}/{1}?{2}".format(API_URLS[ENVIRONMENT], resource, query)
+        url = url + '?' + query
+        query_url = url
+        inital_url = url + '&max_results=1'
     else:
-        url = "{0}/{1}".format(API_URLS[ENVIRONMENT], resource)
+        inital_url = url + '?max_results=1'
+        query_url = None
     log.debug('utilities | Get Eve | url - %s', url)
 
     try:
-        r = requests.get(url, auth=(SERVICE_ACCOUNT_USERNAME,
-                                    SERVICE_ACCOUNT_PASSWORD), verify=SSL_VERIFICATION)
+        # Get json output
+        r_inital = requests.get(
+            url,
+            auth=(SERVICE_ACCOUNT_USERNAME, SERVICE_ACCOUNT_PASSWORD),
+            verify=SSL_VERIFICATION).json()
     except Exception as error:
         log.error('GET to Atlas | URL - %s | Error - %s', url, error)
 
-    return r.json()
+    total_items = r_inital['_meta']['total']
+    json_result = None
+
+    if total_items > PAGINATION_DEFAULT:
+        # Return the ceiling of x as a float, the smallest integer value greater than or equal to x.
+        num_pages = int(ceil(total_items/PAGINATION_DEFAULT))
+        # Range - Generate numbers from the first number up to, but not including the second.
+        for page in range(1, num_pages + 1):
+            if query_url:
+                page_url = query_url + '&page={0}&max_results={1}'.format(page, PAGINATION_DEFAULT)
+            else:
+                page_url = url + '?page={0}&max_results={1}'.format(page, PAGINATION_DEFAULT)
+            r_page = requests.get(
+                page_url,
+                auth=(SERVICE_ACCOUNT_USERNAME, SERVICE_ACCOUNT_PASSWORD),
+                verify=SSL_VERIFICATION).json()
+            log.debug('utilities | Get eve | page request - %s', r_page)
+            # Merge lists
+            if json_result:
+                log.debug('Backup data | Original data - %s', json_result)
+                log.debug('Backup data | New data - %s', r_page)
+                json_result = json_result + r_page
+                log.debug('Backup data | Final data - %s', json_result)
+            else:
+                json_result = r_page
+    else:
+        if query_url:
+            total_url = query_url + '&max_results={0}'.format(total_items)
+        else:
+            total_url = url + '?max_results={0}'.format(total_items)
+        json_result = requests.get(total_url, auth=(
+            SERVICE_ACCOUNT_USERNAME,  SERVICE_ACCOUNT_PASSWORD), verify=SSL_VERIFICATION).json()
+
+    return json_result
 
 
-def get_single_eve(resource, id):
+def get_single_eve(resource, id, version=None, env=ENVIRONMENT):
     """
     Make calls to the Atlas API.
 
@@ -270,19 +300,18 @@ def get_single_eve(resource, id):
     :param id: _id string
     :return: dict of items that match the query string.
     """
-    url = "{0}/{1}/{2}".format(API_URLS[ENVIRONMENT], resource, id)
+    if version:
+        url = "{0}/{1}/{2}?version={3}".format(API_URLS[env], resource, id, version)
+    else:
+        url = "{0}/{1}/{2}".format(API_URLS[env], resource, id)
     log.debug('utilities | Get Eve Single | url - %s', url)
 
-    try:
-        r = requests.get(url, auth=(SERVICE_ACCOUNT_USERNAME,
-                                    SERVICE_ACCOUNT_PASSWORD), verify=SSL_VERIFICATION)
-    except Exception as error:
-        log.error('GET to Single item in Atlas | URL - %s | Error - %s', url, error)
+    r = requests.get(url, auth=(SERVICE_ACCOUNT_USERNAME,
+                                SERVICE_ACCOUNT_PASSWORD), verify=SSL_VERIFICATION)
 
     return r.json()
 
-
-def patch_eve(resource, id, request_payload):
+def patch_eve(resource, id, request_payload, env=ENVIRONMENT):
     """
     Patch items in the Atlas API.
 
@@ -291,13 +320,14 @@ def patch_eve(resource, id, request_payload):
     :param request_payload:
     :return:
     """
-    url = "{0}/{1}/{2}".format(API_URLS[ENVIRONMENT], resource, id)
-    get_etag = get_single_eve(resource, id)
+    url = "{0}/{1}/{2}".format(API_URLS[env], resource, id)
+    get_etag = get_single_eve(resource, id, env=env)
     headers = {'Content-Type': 'application/json', 'If-Match': get_etag['_etag']}
 
     try:
         r = requests.patch(url, headers=headers, data=json.dumps(request_payload), auth=(
             SERVICE_ACCOUNT_USERNAME, SERVICE_ACCOUNT_PASSWORD), verify=SSL_VERIFICATION)
+        log.info('PATCH to Atlas | URL - %s | Response - %s', url, r.text)
     except Exception as error:
         log.error('PATCH to Atlas | URL - %s | Error - %s', url, error)
 
@@ -341,13 +371,60 @@ def get_current_code(name, code_type):
         return False
 
 
+# Code related utility functions
+def code_path(item):
+    """
+    Determine the path for a code item
+    """
+    log.debug('Utilities | Code Path | Item - %s', item)
+    code_dir = '{0}/{1}/{2}/{2}-{3}'.format(
+        CODE_ROOT,
+        code_type_directory_name(item['meta']['code_type']),
+        item['meta']['name'],
+        item['meta']['version']
+    )
+    return code_dir
+
+
+def code_type_directory_name(code_type):
+    """
+    Determine the path for a code item
+    """
+    if code_type == 'library':
+        return 'libraries'
+    elif code_type == 'static':
+        return 'static'
+
+    return code_type + 's'
+
+
+def ignore_code_file(file_to_check):
+    """Check if the file matches one of the INSTANCE_CODE_IGNORE_REGEX regexes
+
+    Arguments:
+        file_to_check {string} -- filename to check
+
+    Returns:
+        bool -- TRUE if file should be ignored
+    """
+    # Join all regex expressions into a single expression with the pipe seperator.
+    # We use '?:' since we don't care which expression matches.
+    regex = '(?:%s)' % '|'.join(INSTANCE_CODE_IGNORE_REGEX)
+    log.debug('Utilities | Ignore code file | regex - %s', regex)
+    # Multiline modifier: ^ and $ to match the begin/end of each line (not only begin/end of string)
+    search = re.search(regex, file_to_check, re.MULTILINE)
+    if not search:
+        log.debug('Utilities | Ignore code file | File - %s | result - %s', file_to_check, search)
+    return bool(search)
+
+
 def get_code(name, code_type=''):
     """
-    Get the current code item for a given name and code_type.
+    Get the code item(s) for a given name and code_type.
 
     :param name: string
     :param code_type: string
-    :return: _id of the item.
+    :return: response object
     """
     if code_type:
         query = 'where={{"meta.name":"{0}","meta.code_type":"{1}"}}'.format(name, code_type)
@@ -372,70 +449,16 @@ def get_code_name_version(code_id):
 
 def get_code_label(code_id):
     """
-    Get the label for a code item.
+    Get the label for a code item if it has one, otherwise use the machine name and version.
+
     :param code_id: string '_id' for a code item
-    :return: string 'label'-'version'
+    :return: string 'label or 'name-version'
     """
     code = get_single_eve('code', code_id)
-    return code['meta']['label']
-
-
-def import_code(query):
-    """
-    Import code definitions from a URL. Should be a JSON file export from Atlas or a live Atlas code
-    endpoint.
-
-    :param query: URL for JSON to import
-    """
-    r = requests.get(query)
-    log.debug('Import Code | JSON Import | %s', r.json())
-    data = r.json()
-    for code in data['_items']:
-        payload = {
-            'git_url': code['git_url'],
-            'commit_hash': code['commit_hash'],
-            'meta': {
-                'name': code['meta']['name'],
-                'version': code['meta']['version'],
-                'code_type': code['meta']['code_type'],
-                'is_current': code['meta']['is_current'],
-            },
-        }
-        if code['meta'].get('tag'):
-            payload['meta']['tag'] = code['meta']['tag']
-        if code['meta'].get('label'):
-            payload['meta']['label'] = code['meta']['label']
-        post_eve('code', payload)
-
-
-def rebalance_update_groups(item):
-    """
-    Redistribute instances into update groups.
-    :param item: command item
-    :return:
-    """
-    site_query = 'where={0}'.format(item['query'])
-    sites = get_eve('sites', site_query)
-    installed_update_group = 0
-    launched_update_group = 0
-    if not sites['_meta']['total'] == 0:
-        for site in sites['_items']:
-            # Only update if the group is less than 11.
-            if site['update_group'] < 11:
-                if site['status'] == 'launched':
-                    patch_payload = '{{"update_group": {0}}}'.format(launched_update_group)
-                    if launched_update_group < 10:
-                        launched_update_group += 1
-                    else:
-                        launched_update_group = 0
-                if site['status'] == 'installed':
-                    patch_payload = '{{"update_group": {0}}}'.format(installed_update_group)
-                    if installed_update_group < 2:
-                        installed_update_group += 1
-                    else:
-                        installed_update_group = 0
-                if patch_payload:
-                    patch_eve('sites', site['_id'], patch_payload)
+    if code['meta'].get('meta'):
+        return code['meta']['label']
+    else:
+        return get_code_name_version(code_id)
 
 
 def post_to_slack_payload(payload):
@@ -448,11 +471,10 @@ def post_to_slack_payload(payload):
     if SLACK_NOTIFICATIONS:
         if ENVIRONMENT == 'local':
             payload['channel'] = '@{0}'.format(SLACK_USERNAME)
-
-        # We need 'json=payload' vs. 'payload' because arguments can be passed
-        # in any order. Using json=payload instead of data=json.dumps(payload)
-        # so that we don't have to encode the dict ourselves. The Requests
-        # library will do it for us.
+        if 'username' not in payload:
+            payload['username'] = 'Atlas'
+        # Using json=payload instead of data=json.dumps(payload) so that we don't have to encode the
+        # dict ourselves. The Requests library will do it for us.
         r = requests.post(SLACK_URL, json=payload)
         if not r.ok:
             print r.text
@@ -466,15 +488,231 @@ def send_email(email_message, email_subject, email_to):
     :param email_subject: content of the subject line
     :param email_to: list of email address(es) the email will be sent to
     """
+    log.debug('Send email | Message - %s | Subject - %s | To - %s',
+              email_message, email_subject, email_to)
     if SEND_NOTIFICATION_EMAILS:
         # We only send plaintext to prevent abuse.
         msg = MIMEText(email_message, 'plain')
         msg['Subject'] = email_subject
         msg['From'] = SEND_NOTIFICATION_FROM_EMAIL
-        msg['To'] = ", ".join(email_to)
+        final_email_to = [x for x in email_to if x not in EMAIL_USERS_EXCLUDE]
+        log.info('Send email | Final To - %s', final_email_to)
+        msg['To'] = ", ".join(final_email_to)
 
-        s = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT)
-        s.starttls()
-        s.login(EMAIL_USERNAME, EMAIL_PASSWORD)
-        s.sendmail(SEND_NOTIFICATION_FROM_EMAIL, email_to, msg.as_string())
-        s.quit()
+        if final_email_to:
+            s = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT)
+            s.starttls()
+            s.login(EMAIL_USERNAME, EMAIL_PASSWORD)
+            s.sendmail(SEND_NOTIFICATION_FROM_EMAIL, final_email_to, msg.as_string())
+            s.quit()
+
+
+def package_import(site, env=ENVIRONMENT, metadata=False):
+    """
+    Take a site record, lookup the packages, and return a list of packages to add to the instance.
+    :param site: Instance to lookup
+    :param env: Environment to look in
+    :param metadata_list: If true return a list of metadata instead of _ids
+    :return: List of package IDs or a list of hashes
+    """
+    if 'package' in site['code']:
+        # Start with an empty list
+        package_list = []
+        metadata_list = []
+        for package in site['code']['package']:
+            package_result = get_single_eve('code', package, env=env)
+            log.debug(
+                'Utilities | Package import | Checking for packages | Request result - %s', package_result)
+            if package_result['_deleted']:
+                current_package = get_current_code(
+                    package_result['meta']['name'], package_result['meta']['code_type'])
+                log.debug(
+                    'Utilities | Package import | Getting current version of package - %s', current_package)
+                if current_package:
+                    package_list.append(current_package)
+                else:
+                    raise Exception('There is no current version of {0}. This backup cannot be restored.'.format(
+                        package_result['meta']['name']))
+            else:
+                package_list.append(package_result['_id'])
+            # Add a tuple for the metadata_list
+            metadata_list.append(
+                (package_result['meta']['name'], package_result['meta']['code_type']))
+    else:
+        package_list = None
+
+    if metadata:
+        log.debug('Utilities | Package import | Return metadata list')
+        return metadata_list
+
+    return package_list
+
+
+def package_import_cross_env(site, env=ENVIRONMENT):
+    """
+    Take a site record from another environment, lookup the packages, and return a list of
+    equivelvant packages to add to the new instance.
+    :return: List of package IDs
+    """
+    if 'package' in site['code']:
+        metadata_list = package_import(site, env=env, metadata=True)
+        package_list = []
+        for item in metadata_list:
+            current_package = get_current_code(item[0], item[1])
+            if current_package:
+                package_list.append(current_package)
+            else:
+                raise Exception(
+                    'There is no current version of {0}. This backup cannot be restored.'.format(item[0]))
+    else:
+        package_list = None
+    return package_list
+
+
+def create_saml_database():
+    """
+    Create a database and user for SAML auth
+    """
+    log.info('Create SAML Database')
+    # Start connection
+    mariadb_connection = mariadb.connect(
+        user=DATABASE_USER,
+        password=DATABASE_PASSWORD,
+        host=SERVERDEFS[ENVIRONMENT]['database_servers']['master'],
+        port=SERVERDEFS[ENVIRONMENT]['database_servers']['port']
+    )
+
+    cursor = mariadb_connection.cursor()
+
+    # Create database
+    try:
+        cursor.execute("CREATE DATABASE `saml`;")
+    except mariadb.Error as error:
+        log.error('Create Database | saml | %s', error)
+        raise
+
+    instance_database_password = SAML_AUTH
+    # Add user
+    try:
+        if ENVIRONMENT != 'local':
+            cursor.execute("CREATE USER 'saml'@'{0}' IDENTIFIED BY '{1}';".format(
+                SERVERDEFS[ENVIRONMENT]['database_servers']['user_host_pattern'],
+                instance_database_password))
+        else:
+            cursor.execute("CREATE USER 'saml'@'localhost' IDENTIFIED BY '{0}';".format(
+                instance_database_password))
+    except mariadb.Error as error:
+        log.error('Create User | saml | %s', error)
+        raise
+
+    # Grant privileges
+    try:
+        if ENVIRONMENT != 'local':
+            cursor.execute("GRANT ALL PRIVILEGES ON saml.* TO 'saml'@'{0}';".format(
+                SERVERDEFS[ENVIRONMENT]['database_servers']['user_host_pattern']))
+        else:
+            cursor.execute("GRANT ALL PRIVILEGES ON saml.* TO 'saml'@'localhost';")
+    except mariadb.Error as error:
+        log.error('Grant Privileges | saml | %s', error)
+        raise
+
+    mariadb_connection.commit()
+    mariadb_connection.close()
+
+    log.info('Create Database | saml | Success')
+
+
+def delete_saml_database():
+    """
+    Delete database and user
+
+    :param site_id: SID for instance to remove.
+    """
+    log.info('Delete Database | saml')
+    # Start connection
+    mariadb_connection = mariadb.connect(
+        user=DATABASE_USER,
+        password=DATABASE_PASSWORD,
+        host=SERVERDEFS[ENVIRONMENT]['database_servers']['master'],
+        port=SERVERDEFS[ENVIRONMENT]['database_servers']['port']
+    )
+    cursor = mariadb_connection.cursor()
+
+    # Drop database
+    try:
+        cursor.execute("DROP DATABASE IF EXISTS `saml`;")
+    except mariadb.Error as error:
+        log.error('Drop Database | saml | %s', error)
+
+    # Drop user
+    try:
+        if ENVIRONMENT != 'local':
+            cursor.execute("DROP USER 'saml'@'{0}';".format(
+                SERVERDEFS[ENVIRONMENT]['database_servers']['user_host_pattern']))
+        else:
+            cursor.execute("DROP USER 'saml'@'localhost';")
+    except mariadb.Error as error:
+        log.error('Drop User | saml | %s', error)
+
+    mariadb_connection.commit()
+    mariadb_connection.close()
+    log.info('Delete Database | saml | Success')
+
+
+def relative_symlink(source, destination):
+    os.symlink(os.path.relpath(source, os.path.dirname(destination)), destination)
+
+
+def sync(source, hosts, target, exclude=None):
+    """Sync files, symlinks, and directories between servers
+
+    Arguments:
+        source {string} -- source path
+        hosts {list} -- list of hosts to sync to, will be deduped by function
+        target {string} -- destination path
+        exclude {string} -- directory to exclude from rsync
+    """
+
+    log.info('Utilities | Sync | Source - %s', source)
+    # Use `set` to dedupe the host list, and cast it back into a list
+    hosts = list(set(hosts))
+    # Recreate readme
+    filename = source + "/README.md"
+    # Remove the existing file.
+    if os.access(filename, os.F_OK):
+        os.remove(filename)
+    f = open(filename, "w+")
+    f.write("Directory is synced from Atlas. Any changes will be overwritten.")
+    f.close()
+    for host in hosts:
+        # -a archive mode; equals -rlptgoD
+        # -z compress file data during the transfer
+        # trailing slash on src copies the contents, not the parent dir itself.
+        # --delete delete extraneous files from dest dirs
+        if exclude:
+            cmd = 'rsync -aqz --exclude={0} {1}/ {2}:{3} --delete'.format(exclude, source, host, target)
+        else:
+            cmd = 'rsync -aqz {0}/ {1}:{2} --delete'.format(source, host, target)
+        log.debug('Utilities | Sync | Command - %s | Host - %s', cmd, host)
+        try:
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            log.error('Utilities | Sync | Failed | Return code - %s | StdErr - %s | Host - %s', e.returncode, e.output, host)
+        else:
+            log.info('Utilities | Sync | Success | Host - %s', host)
+
+
+def file_accessable_and_writable(file):
+    """Verify that a file exists and make it writable if it is not
+
+    Arguments:
+        file {string} -- Path of file to check
+    """
+    if os.access(file, os.F_OK):
+        # Check if file is writable
+        if not os.access(file, os.W_OK):
+            # Make it writable, get the current permissions and OR them together with the write bit.
+            st = os.stat(file)
+            os.chmod(file, st.st_mode | stat.S_IWRITE)
+            return True
+        return True
